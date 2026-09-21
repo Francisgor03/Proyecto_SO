@@ -29,6 +29,12 @@ int main(void) {
             continue;
         }
 
+        /* Consulta visible de variables de entorno mediante getenv(). */
+        if (strcmp(argumentos[0], "entorno") == 0) {
+            mostrar_entorno(argumentos[1]);
+            continue;
+        }
+
         /* Verificacion de comandos internos (built-ins) */
         int builtin_res = ejecutar_builtin(argumentos);
         if (builtin_res == 2) {

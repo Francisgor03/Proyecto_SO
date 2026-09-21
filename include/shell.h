@@ -67,4 +67,15 @@ int ejecutar_cat(void);
  */
 void inicializar_senales(void);
 
+/**
+ * @brief Muestra el valor de una variable de entorno mediante getenv().
+ *
+ * Si nombre es NULL, consulta la variable HOME.  La función imprime un
+ * mensaje claro cuando la variable solicitada no existe.
+ *
+ * @param nombre Nombre de la variable, o NULL para consultar HOME.
+ * @return int 0 si la variable existe, -1 si no existe.
+ */
+int mostrar_entorno(const char *nombre);
+
 #endif /* SHELL_H */

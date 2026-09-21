@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
+#include <stdlib.h>
 #include <signal.h>
 #include <unistd.h>
 #include "shell.h"
@@ -22,4 +23,17 @@ void inicializar_senales(void) {
     if (sigaction(SIGINT, &sa, NULL) == -1) {
         perror("sigaction SIGINT");
     }
+}
+
+int mostrar_entorno(const char *nombre) {
+    const char *variable = nombre != NULL ? nombre : "HOME";
+    const char *valor = getenv(variable);
+
+    if (valor == NULL) {
+        fprintf(stderr, "entorno: la variable %s no esta definida\n", variable);
+        return -1;
+    }
+
+    printf("%s=%s\n", variable, valor);
+    return 0;
 }
