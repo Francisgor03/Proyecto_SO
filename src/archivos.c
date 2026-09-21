@@ -1,7 +1,9 @@
+#define _POSIX_C_SOURCE 200809L
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include "shell.h"
 
 #define MODO_ARCHIVO 0644
 

@@ -1,85 +1,47 @@
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include "shell.h"
 
-#define MAX_LINEA 1024
-#define MAX_ARGUMENTOS 64
+int main(void) {
+    char linea[MAX_LINEA];
+    char *argumentos[MAX_ARGUMENTOS];
 
-void ejecutar_comando(char *argumentos[]);
+    /* Inicializacion de manejadores de senales (Módulo Dupla 3) */
+    inicializar_senales();
 
-int main(void){
-	char linea[MAX_LINEA];
-	char *argumentos[MAX_ARGUMENTOS];
-	char operadores[MAX_ARGUMENTOS][2];
-	char *inicio;
-	char separador;
-	char *cursor;
-	int i;
+    /* Bucle interactivo REPL */
+    while (1) {
+        printf("%s", PROMPT);
+        fflush(stdout);
 
-	while (1){
-	   printf("mi_shell> ");
-	   fflush(stdout);
+        /* Lectura segura de linea desde stdin */
+        if (fgets(linea, sizeof(linea), stdin) == NULL) {
+            /* Manejo de fin de archivo (EOF / Ctrl+D) */
+            printf("\n");
+            break;
+        }
 
-	   if(fgets(linea, sizeof(linea), stdin) == NULL){
-		printf("\n");
-		break;
-	   }
+        /* Analisis sintactico elemental de la linea */
+        int num_args = parsear_linea(linea, argumentos);
+        if (num_args == 0 || argumentos[0] == NULL) {
+            continue;
+        }
 
-	   linea[strcspn(linea, "\n")] = '\0';
+        /* Verificacion de comandos internos (built-ins) */
+        int builtin_res = ejecutar_builtin(argumentos);
+        if (builtin_res == 2) {
+            /* Comando exit: terminar la sesion limpiamente */
+            break;
+        } else if (builtin_res == 1) {
+            /* Comando interno ejecutado (ej. cd), continuar al siguiente prompt */
+            continue;
+        }
 
-		i = 0;
-		cursor = linea;
+        /* Ejecucion de comandos externos mediante gestion de procesos */
+        ejecutar_comando(argumentos);
+    }
 
-		while (*cursor != '\0' && i < MAX_ARGUMENTOS - 1){
-			while (*cursor == ' ' || *cursor == '\t'){
-				cursor++;
-			}
-
-			if (*cursor == '\0'){
-				break;
-			}
-
-			if (*cursor == '<' || *cursor == '>'){
-				operadores[i][0] = *cursor;
-				operadores[i][1] = '\0';
-				argumentos[i] = operadores[i];
-				i++;
-				cursor++;
-				continue;
-			}
-
-			inicio = cursor;
-			while (*cursor != '\0' && *cursor != ' ' && *cursor != '\t' &&
-				*cursor != '<' && *cursor != '>'){
-				cursor++;
-			}
-
-			separador = *cursor;
-			*cursor = '\0';
-			argumentos[i] = inicio;
-			i++;
-
-			if (separador == '<' || separador == '>'){
-				operadores[i][0] = separador;
-				operadores[i][1] = '\0';
-				argumentos[i] = operadores[i];
-				i++;
-				cursor++;
-			} else if (separador != '\0'){
-				cursor++;
-			}
-		}
-	   argumentos[i] = NULL;
-
-	   if(argumentos [0] == NULL){
-		continue;
-	   }
-
-	   if (strcmp(argumentos[0], "exit") == 0){
-		break;
-	   }
-
-	   ejecutar_comando(argumentos);
-	}
-
-	return 0;
+    return 0;
 }
