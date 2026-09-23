@@ -47,23 +47,29 @@ wsl
 ### 1.2. Actualización del sistema
 
 Una vez dentro de Ubuntu, se actualizaron los paquetes del sistema mediante:
-```
+
+```sh
 sudo apt update
 ```
+
 Luego se realizó la actualización de paquetes:
-```
+
+```sh
 sudo apt upgrade -y
 ```
+
 ### 1.3. Instalación de herramientas necesarias
 
 Para trabajar con el proyecto se necesitan las herramientas de compilación y control de versiones
 Se instalaron mediante:
-```
+
+```sh
 sudo apt install git gcc make -y
 ```
-Estas herramientas permiten obtener el proyecto desde GitHub y compilar el código fuente en C
 
-## Compilación y ejecución
+Estas herramientas permiten compilar el código fuente en C
+
+## 2. Compilación y ejecución
 
 Se necesita un compilador C compatible con POSIX y `make`.
 
@@ -84,7 +90,7 @@ Para eliminar los archivos generados por la compilación:
 make clean
 ```
 
-## Comandos disponibles
+## 3. Comandos disponibles
 
 El shell ejecuta programas que estén disponibles en el `PATH`, por ejemplo
 `pwd`, `ls` o `echo`. También incorpora estos comandos internos:
@@ -95,7 +101,7 @@ entorno [VARIABLE]    Muestra VARIABLE con getenv(). Sin argumento muestra HOME.
 exit                  Cierra el shell de manera ordenada.
 ```
 
-## Redirecciones
+## 4. Redirecciones
 
 Se admiten redirecciones de entrada y salida mediante `<` y `>`. Los
 operadores deben escribirse separados por espacios.
@@ -108,7 +114,7 @@ La implementación abre archivos con `open()`, reemplaza los descriptores
 estándar con `dup2()` y usa `read()`, `write()` y `close()` para el comando
 `cat` sin argumentos.
 
-## Manejo de señales y entorno
+## 5. Manejo de señales y entorno
 
 Al presionar Ctrl+C se recibe `SIGINT`. El manejador instalado con
 `sigaction()` evita que el proceso principal del shell termine y vuelve a
@@ -118,7 +124,7 @@ Las variables de entorno se consultan con `getenv()`. Esto se puede verificar
 con `entorno HOME`; además, `cd` sin argumento usa el valor de `HOME` como
 directorio de destino.
 
-## Ejemplo de sesión
+## 6. Ejemplo de sesión
 
 ```text
 coreos$ entorno HOME
