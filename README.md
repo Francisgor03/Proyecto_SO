@@ -84,6 +84,9 @@ Para compilar y ejecutar las pruebas automatizadas:
 make test
 ```
 
+Este objetivo verifica la redireccion de entrada y salida mediante `cat`,
+`<` y `>`.
+
 Para eliminar los archivos generados por la compilación:
 
 ```sh
@@ -93,7 +96,8 @@ make clean
 ## 3. Comandos disponibles
 
 El shell ejecuta programas que estén disponibles en el `PATH`, por ejemplo
-`pwd`, `ls` o `echo`. También incorpora estos comandos internos:
+`pwd`, `ls`, `echo` o `cat`, mediante `fork()` y `execvp()`. También incorpora
+estos comandos internos, implementados dentro del proyecto:
 
 ```text
 cd [directorio]       Cambia el directorio actual. Sin argumento usa HOME.
@@ -104,10 +108,29 @@ mostrar [archivo]     Muestra el contenido usando read() y write().
 exit                  Cierra el shell de manera ordenada.
 ```
 
+Los comandos propios para trabajar con archivos funcionan de la siguiente
+manera:
+
+```sh
+crear datos.txt
+agregar datos.txt Primer registro
+agregar datos.txt Segundo registro
+mostrar datos.txt
+```
+
+`crear` usa `open()` para crear un archivo vacío. `agregar` usa `open()` con
+`O_APPEND` y `write()` para añadir registros al final sin borrar los
+anteriores. `mostrar` usa `open()`, `read()` y `write()` para mostrar el
+contenido del archivo.
+
+Los comandos `cd`, `exit`, `entorno`, `crear`, `agregar` y `mostrar` se
+ejecutan directamente dentro del shell. Los comandos `ls`, `pwd`, `echo` y
+`cat` son programas externos que el shell ejecuta mediante un proceso hijo.
+
 ## 4. Redirecciones
 
-Se admiten redirecciones de entrada y salida mediante `<` y `>`. Los
-operadores deben escribirse separados por espacios.
+Se admiten redirecciones de entrada y salida mediante `<` y `>`. En la
+version actual, los operadores deben escribirse separados por espacios.
 
 ```sh
 cat < entrada.txt > salida.txt
@@ -136,8 +159,14 @@ respetando las redirecciones configuradas.
 Al presionar Ctrl+C se recibe `SIGINT`. El manejador instalado con
 `sigaction()` (`senales.c`, función `inicializar_senales`) evita que el
 proceso principal del shell termine. El manejador escribe directamente con
-`write()` (función segura para señales) un salto de línea y el prompt, y
-vuelve a mostrar el prompt sin abortar la sesión.
+`write()` (función segura para señales) el mensaje:
+
+```text
+Ctrl+C no cierra el shell. Use 'exit' para salir.
+```
+
+Después vuelve a mostrar el prompt sin abortar la sesión. El comando `exit` es
+la forma definida por el proyecto para cerrar el shell.
 
 Las variables de entorno se consultan con `getenv()`. Esto se puede verificar
 con `entorno HOME`; además, `cd` sin argumento usa el valor de `HOME` como
@@ -148,10 +177,20 @@ directorio de destino, y si `HOME` no está definida cae a `/`.
 ```text
 coreos$ entorno HOME
 HOME=/home/usuario
+coreos$ crear /tmp/registros.txt
+Archivo creado: /tmp/registros.txt
+coreos$ agregar /tmp/registros.txt Primer registro
+Registro agregado en: /tmp/registros.txt
+coreos$ agregar /tmp/registros.txt Segundo registro
+Registro agregado en: /tmp/registros.txt
+coreos$ mostrar /tmp/registros.txt
+Primer registro
+Segundo registro
 coreos$ cd /tmp
 coreos$ pwd
 /tmp
-coreos$ echo Hola desde el shell
+coreos$ echo Hola desde el shell > /tmp/salida.txt
+coreos$ cat < /tmp/salida.txt
 Hola desde el shell
 coreos$ exit
 ```
