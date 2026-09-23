@@ -110,19 +110,35 @@ operadores deben escribirse separados por espacios.
 cat < entrada.txt > salida.txt
 ```
 
-La implementación abre archivos con `open()`, reemplaza los descriptores
-estándar con `dup2()` y usa `read()`, `write()` y `close()` para el comando
-`cat` sin argumentos.
+La implementación (`archivos.c`, función `configurar_redirecciones`) recorre
+los argumentos, detecta los operadores `<` y `>`, y para cada uno:
+
+- Abre el archivo con `open()` (modo lectura o escritura + creación +
+truncado, con permisos `0644`).
+- Reemplaza el descriptor estándar correspondiente con `dup2()`.
+- Cierra el descriptor original con `close()`.
+
+Además, el código detecta errores como:
+
+- Operador `<` o `>` sin archivo después.
+- Redirección de entrada duplicada.
+- Redirección de salida duplicada.
+
+El comando `cat` sin argumentos se ejecuta con la función `ejecutar_cat()`,
+que usa `read()` y `write()` directamente sobre los descriptores estándar,
+respetando las redirecciones configuradas.
 
 ## 5. Manejo de señales y entorno
 
 Al presionar Ctrl+C se recibe `SIGINT`. El manejador instalado con
-`sigaction()` evita que el proceso principal del shell termine y vuelve a
-mostrar el prompt.
+`sigaction()` (`senales.c`, función `inicializar_senales`) evita que el
+proceso principal del shell termine. El manejador escribe directamente con
+`write()` (función segura para señales) un salto de línea y el prompt, y
+vuelve a mostrar el prompt sin abortar la sesión.
 
 Las variables de entorno se consultan con `getenv()`. Esto se puede verificar
 con `entorno HOME`; además, `cd` sin argumento usa el valor de `HOME` como
-directorio de destino.
+directorio de destino, y si `HOME` no está definida cae a `/`.
 
 ## 6. Ejemplo de sesión
 
