@@ -7,9 +7,8 @@
 
 static void manejar_sigint(int sig) {
     (void)sig;
-    /* Al recibir SIGINT (Ctrl+C), no cerramos el shell.
-       Escribimos un salto de linea y el prompt de forma segura. */
-    const char msg[] = "\n" PROMPT;
+     /* Ctrl+C cancela la entrada actual, pero no termina el shell. */
+     const char msg[] = "\nCtrl+C no cierra el shell. Use 'exit' para salir.\n" PROMPT;
     ssize_t res = write(STDOUT_FILENO, msg, sizeof(msg) - 1);
     (void)res;
 }

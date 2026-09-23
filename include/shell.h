@@ -57,6 +57,13 @@ int configurar_redirecciones(char *argumentos[]);
  */
 int ejecutar_cat(void);
 
+/**
+ * @brief Comandos propios para crear, agregar y mostrar archivos.
+ */
+int crear_archivo(const char *ruta);
+int agregar_archivo(const char *ruta, char *datos[]);
+int mostrar_archivo(const char *ruta);
+
 /* ========================================================================= */
 /* Módulo 3: Señales (Dupla 3 - Manejo de Señales POSIX)                     */
 /* ========================================================================= */

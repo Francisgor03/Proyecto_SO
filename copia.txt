@@ -98,9 +98,6 @@ El shell ejecuta programas que estén disponibles en el `PATH`, por ejemplo
 ```text
 cd [directorio]       Cambia el directorio actual. Sin argumento usa HOME.
 entorno [VARIABLE]    Muestra VARIABLE con getenv(). Sin argumento muestra HOME.
-crear [archivo]       Crea un archivo vacío usando open().
-agregar [archivo] ... Agrega un registro al final usando write() y O_APPEND.
-mostrar [archivo]     Muestra el contenido usando read() y write().
 exit                  Cierra el shell de manera ordenada.
 ```
 

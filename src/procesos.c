@@ -52,6 +52,21 @@ int ejecutar_builtin(char *args[]) {
         return 1;
     }
 
+    if (strcmp(args[0], "crear") == 0) {
+        crear_archivo(args[1]);
+        return 1;
+    }
+
+    if (strcmp(args[0], "agregar") == 0) {
+        agregar_archivo(args[1], &args[2]);
+        return 1;
+    }
+
+    if (strcmp(args[0], "mostrar") == 0) {
+        mostrar_archivo(args[1]);
+        return 1;
+    }
+
     return 0;
 }
 
