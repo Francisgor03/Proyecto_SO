@@ -27,6 +27,42 @@ entorno y manejar Ctrl+C sin terminar el shell.
               Interfaz común de los módulos
 ```
 
+## 1. Preparación del entorno
+
+Para el desarrollo y ejecución del proyecto se utilizó un entorno Linux,
+debido a que el Mini Shell implementa funcionalidades compatibles con POSIX,
+como creación y ejecución de procesos, manejo de archivos, redirecciones y
+señales.
+En nuestro caso, se utilizó Ubuntu mediante WSL (Windows Subsystem for Linux).
+
+### 1.1. Iniciar Ubuntu
+
+Se inició Ubuntu desde Windows mediante WSL.
+Desde PowerShell o CMD se puede ingresar al entorno Linux utilizando:
+
+```sh
+wsl
+```
+
+### 1.2. Actualización del sistema
+
+Una vez dentro de Ubuntu, se actualizaron los paquetes del sistema mediante:
+
+```sudo apt update
+```
+Luego se realizó la actualización de paquetes:
+```
+sudo apt upgrade -y
+```
+### 1.3. Instalación de herramientas necesarias
+
+Para trabajar con el proyecto se necesitan las herramientas de compilación y control de versiones
+Se instalaron mediante:
+```
+sudo apt install git gcc make -y
+```
+Estas herramientas permiten obtener el proyecto desde GitHub y compilar el código fuente en C
+
 ## Compilación y ejecución
 
 Se necesita un compilador C compatible con POSIX y `make`.
