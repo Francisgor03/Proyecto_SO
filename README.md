@@ -47,8 +47,8 @@ wsl
 ### 1.2. Actualización del sistema
 
 Una vez dentro de Ubuntu, se actualizaron los paquetes del sistema mediante:
-
-```sudo apt update
+```
+sudo apt update
 ```
 Luego se realizó la actualización de paquetes:
 ```
