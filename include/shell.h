@@ -57,6 +57,13 @@ int configurar_redirecciones(char *argumentos[]);
  */
 int ejecutar_cat(void);
 
+/**
+ * @brief Comandos propios para crear, agregar y mostrar archivos.
+ */
+int crear_archivo(const char *ruta);
+int agregar_archivo(const char *ruta, char *datos[]);
+int mostrar_archivo(const char *ruta);
+
 /* ========================================================================= */
 /* Módulo 3: Señales (Dupla 3 - Manejo de Señales POSIX)                     */
 /* ========================================================================= */
@@ -66,5 +73,16 @@ int ejecutar_cat(void);
  *        para garantizar que el Shell no termine abruptamente.
  */
 void inicializar_senales(void);
+
+/**
+ * @brief Muestra el valor de una variable de entorno mediante getenv().
+ *
+ * Si nombre es NULL, consulta la variable HOME.  La función imprime un
+ * mensaje claro cuando la variable solicitada no existe.
+ *
+ * @param nombre Nombre de la variable, o NULL para consultar HOME.
+ * @return int 0 si la variable existe, -1 si no existe.
+ */
+int mostrar_entorno(const char *nombre);
 
 #endif /* SHELL_H */
