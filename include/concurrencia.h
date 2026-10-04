@@ -2,9 +2,9 @@
 #define CONCURRENCIA_H
 
 #include <pthread.h>
+#include <semaphore.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 
 #define BUFFER_SIZE 5
 #define NUM_PRODUCTORES 2
@@ -17,6 +17,9 @@ typedef struct {
     int in;
     int out;
     int contador;
+    sem_t sem_vacios;
+    sem_t sem_llenos;
+    pthread_mutex_t mutex_buffer;
 } buffer_t;
 
 // Contexto individual para cada hilo
@@ -30,6 +33,6 @@ typedef struct {
 void inicializar_buffer(buffer_t *b);
 void* rutina_productor(void *arg);
 void* rutina_consumidor(void *arg);
-void crear_y_esperar_hilos(buffer_t *b);
+int crear_y_esperar_hilos(buffer_t *b);
 
 #endif

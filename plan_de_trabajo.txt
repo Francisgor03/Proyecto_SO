@@ -1,0 +1,98 @@
+Plan de Trabajo y Especificación Técnica: Entrega 2
+Módulo Concurrente, Multihilo y Sincronización IPC (CoreOS-IF0702)
+Semana de Entrega: Semana 7 (Peso: 10% – Calificación máxima: 20 puntos)
+Modelo de referencia sugerido: Problema del Productor-Consumidor con Buffer Acotado / Filósofos Comensales bajo estándar POSIX.
+
+1. Cronograma Secuencial de Fases de Desarrollo
+Para evitar bloqueos y dependencias cruzadas en el repositorio, el trabajo se ejecuta en una cadena estricta de tres fases secuenciales:
+
++---------------------------------------+
+| FASE 1: Arquitectura Multihilo        |  -> Genera el esqueleto y los hilos
++---------------------------------------+
+                   |
+                   v
++---------------------------------------+
+| FASE 2: Sincronización y Semáforos    |  -> Blinda la sección crítica y datos
++---------------------------------------+
+                   |
+                   v
++---------------------------------------+
+| FASE 3: Prevención Deadlock e Informe |  -> Pruebas de estrés y entrega final
++---------------------------------------+
+
+2. Especificación Detallada por Fases
+
+Fase 1: Arquitectura Multihilo y Modelo de Datos
+Criterio de Rúbrica Asociado: Multihilo POSIX (Máx 6 pts).
+Nivel de Dificultad: Media-Alta.
+Precondición: Inicia el proyecto desde cero para la Entrega 2.
+Archivos asignados: include/concurrencia.h, src/hilos.c, src/main_concurrente.c.
+Tareas Técnicas Detalladas
+Definición de estructuras compartidas (include/concurrencia.h):
+Declarar el buffer circular acotado (buffer[BUFFER_SIZE]), índices de inserción (in), extracción (out) y contador de elementos actuales.
+Definir la estructura de contexto para los hilos (thread_context_t) que contenga el identificador numérico de cada hilo, cantidad de iteraciones a ejecutar y punteros a los buffers de trabajo.
+Ciclo de vida y creación con pthread_create() (src/hilos.c):
+Crear la función generadora de hilos trabajadores (Productores y Consumidores o Filósofos).
+Reservar memoria dinámica en el Heap (malloc) o pasar estructuras diferenciadas por valor/puntero seguro a cada hilo para impedir que múltiples hilos sobrescriban el mismo puntero de argumento.
+Rutinas de ejecución de los hilos (rutina_productor, rutina_consumidor):
+Implementar la lógica del bucle de trabajo que simula la producción de datos y el consumo o procesamiento de los mismos.
+Sincronización de terminación con pthread_join():
+Implementar en la función principal la recolección obligatoria de todos los hilos creados, capturando sus códigos de finalización y evitando la existencia de hilos zombi o finalizaciones abruptas del proceso padre.
+Criterio de Aceptación (Entregable a Fase 2):El código compila con gcc -pthread y crea $N$ hilos que acceden al buffer en bucles concurrentes (aunque inicialmente se evidencien inconsistencias por falta de candados).
+
+Fase 2: Control de Secciones Críticas y Primitivas de Sincronización
+Criterio de Rúbrica Asociado: Sincronización y Exclusión Mutua (Máx 8 pts).
+Nivel de Dificultad: Alta.
+Precondición: Recepción del código de Fase 1 con hilos y buffers plenamente operativos.
+Archivos asignados: include/sincronizacion.h, src/sincronizacion.c, actualización de src/hilos.c.
+Tareas Técnicas Detalladas
+Inicialización de Primitivas POSIX (src/sincronizacion.c):
+Declarar e inicializar los semáforos POSIX necesarios (sem_t o sem_open):
+Semáforo contador sem_vacios: inicializado en el tamaño máximo del buffer ($N$).
+Semáforo contador sem_llenos: inicializado en $0$.
+Declarar e inicializar el cerrojo de exclusión mutua (pthread_mutex_t mutex_buffer con pthread_mutex_init).
+Blindaje de la Región Crítica en Productores y Consumidores:
+En el Productor:
+Espera de espacio con sem_wait(&sem_vacios).
+Adquisición del candado con pthread_mutex_lock(&mutex_buffer).
+Sección Crítica: Inserción del elemento en buffer[in] y actualización del índice circular in = (in + 1) % BUFFER_SIZE.
+Liberación del candado con pthread_mutex_unlock(&mutex_buffer).
+Notificación de nuevo elemento con sem_post(&sem_llenos).
+En el Consumidor:
+Espera de datos disponibles con sem_wait(&sem_llenos).
+Adquisición del candado con pthread_mutex_lock(&mutex_buffer).
+Sección Crítica: Extracción del elemento de buffer[out] y actualización del índice out = (out + 1) % BUFFER_SIZE.
+Liberación del candado con pthread_mutex_unlock(&mutex_buffer).
+Notificación de espacio libre con sem_post(&sem_vacios).
+Limpieza Formal de Recursos:
+Implementar la función de destrucción y liberación al finalizar la ejecución (sem_destroy / sem_close / sem_unlink y pthread_mutex_destroy).
+Validación de Condiciones de Carrera (Race Conditions):
+Ejecutar pruebas bajo alta contención concurrente para verificar que ningún elemento sea consumido dos veces ni sobrescrito antes de procesarse.
+Criterio de Aceptación (Entregable a Fase 3):El buffer compartido no sufre corrupción de memoria ni lecturas inconsistentes, manteniendo la integridad del flujo productor-consumidor.
+
+Fase 3: Prevención de Deadlocks, Monitoreo y Documentación
+Criterio de Rúbrica Asociado: Ausencia de Interbloqueos (4 pts) + Informe y Sustentación (2 pts) = Máx 6 pts.
+Nivel de Dificultad: Media-Baja.
+Precondición: Recepción del núcleo concurrente y sincronizado de Fase 2.
+Archivos asignados: src/monitor.c, Makefile, docs/informe_entrega2.md.
+Tareas Técnicas Detalladas
+Mecanismo Formal de Prevención de Deadlocks e Inanición (src/monitor.c):
+Incorporar la ruptura formal de una de las 4 condiciones de Coffman (adquisición jerárquica de recursos o uso de primitivas condicionales como pthread_mutex_trylock).
+Comprobar que ningún hilo sufra inanición (starvation) frente a otros con mayor frecuencia de ejecución.
+Sistema de Monitoreo y Trazabilidad de Estados en Tiempo Real:
+Diseñar un logger thread-safe que imprima las transiciones de estado de forma clara:[HILO ID] -> ESTADO: ESPERANDO RECURSO | EN SECCION CRITICA | LIBERANDO.
+Evitar retardos artificiales excesivos dentro de la sección crítica para no alterar la concurrencia real.
+Automatización y Batería de Pruebas (Makefile):
+Configurar reglas de compilación estricta (-Wall -Wextra -pthread -std=c11).
+Crear la regla make test para lanzar pruebas de estrés sostenidas (ej. 10 productores y 10 consumidores corriendo en paralelo) demostrando la ausencia de bloqueos mutuos.
+Informe Técnico y Sustentación (docs/informe_entrega2.md):
+Diseñar el Diagrama de Estados de los hilos (Listo, Ejecutando, Bloqueado, Terminado).
+Explicar formalmente el diseño de exclusión mutua y la demostración matemática/lógica de prevención de interbloqueos exigida por la rúbrica.
+Criterio de Aceptación (Entrega Final):Proyecto integrado, modular, libre de deadlocks, con suite de pruebas automática documentada y listo para la defensa oral.
+
+3. Matriz de Distribución de Rúbrica
+| Fase   | Área Técnica   | Llamadas al Sistema / Primitivas POSIX   | Puntaje Rúbrica   |
+| Fase 1   | Creación y ciclo de vida multihilo   | pthread_create, pthread_join, gestión de memoria en Heap   | 6 Pts   |
+| Fase 2   | Sincronización y control de regiones críticas   | sem_init/sem_open, sem_wait, sem_post, pthread_mutex_lock/unlock   | 8 Pts   |
+| Fase 3   | Prevención de deadlocks, trazabilidad y memoria técnica   | Ruptura de condiciones de Coffman, pthread_mutex_trylock, informe técnico   | 6 Pts (4 pts + 2 pts)   |
+| Total   | Evaluación Continua Entrega 2   |  | 20 Pts   |
