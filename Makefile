@@ -6,8 +6,9 @@ SOURCES := src/main.c src/procesos.c src/archivos.c src/senales.c
 OBJECTS := $(SOURCES:.c=.o)
 CONCURRENT_TARGET := fase2_concurrente
 CONCURRENT_SOURCES := src/main_concurrente.c src/hilos.c src/sincronizacion.c
+STRESS_TARGET := fase2_concurrente_stress
 
-.PHONY: all run concurrent test test-concurrent clean
+.PHONY: all run concurrent test test-concurrent test-stress clean
 
 all: $(TARGET) $(CONCURRENT_TARGET)
 
@@ -19,6 +20,9 @@ src/%.o: src/%.c
 
 $(CONCURRENT_TARGET): $(CONCURRENT_SOURCES) include/concurrencia.h include/sincronizacion.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -pthread $(CONCURRENT_SOURCES) -o $@
+
+$(STRESS_TARGET): $(CONCURRENT_SOURCES) include/concurrencia.h include/sincronizacion.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) -DNUM_PRODUCTORES=10 -DNUM_CONSUMIDORES=10 -pthread $(CONCURRENT_SOURCES) -o $@
 
 concurrent: $(CONCURRENT_TARGET)
 	./$(CONCURRENT_TARGET)
@@ -36,5 +40,8 @@ test-concurrent: $(CONCURRENT_TARGET)
 	./$(CONCURRENT_TARGET)
 	@echo "Prueba productor-consumidor: OK"
 
+test-stress: $(STRESS_TARGET)
+	bash tests/test_stress_concurrente.sh ./$(STRESS_TARGET)
+
 clean:
-	rm -f $(TARGET) $(CONCURRENT_TARGET) $(OBJECTS)
+	rm -f $(TARGET) $(CONCURRENT_TARGET) $(STRESS_TARGET) $(OBJECTS)

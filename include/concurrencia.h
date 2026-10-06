@@ -6,10 +6,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifndef BUFFER_SIZE
 #define BUFFER_SIZE 5
+#endif
+
+#ifndef NUM_PRODUCTORES
 #define NUM_PRODUCTORES 2
+#endif
+
+#ifndef NUM_CONSUMIDORES
 #define NUM_CONSUMIDORES 2
+#endif
+
+#ifndef TOTAL_ITEMS
 #define TOTAL_ITEMS 6
+#endif
 
 // Estructura del buffer compartido
 typedef struct {
