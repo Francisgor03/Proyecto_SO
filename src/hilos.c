@@ -86,7 +86,8 @@ static void *trabajar(contexto_hilo_t *ctx, int tipo) {
     }
     if (ctx->error) detener(b);
     monitor_estado(&b->monitor, tipo, ctx->id, ctx->error ? "ERROR" : "TERMINADO");
-    monitor_resumen(&b->monitor, tipo, ctx->id, &ctx->progreso);
+    if (!b->monitor.visual)
+        monitor_resumen(&b->monitor, tipo, ctx->id, &ctx->progreso, ctx->items_a_procesar);
     return ctx->error ? ctx : NULL;
 }
 
@@ -125,6 +126,14 @@ int crear_y_esperar_hilos(buffer_t *b) {
         }
         if (retorno != NULL || contextos[i].progreso.completadas != TOTAL_ITEMS)
             resultado = -1;
+    }
+    if (b->monitor.visual) {
+        monitor_tabla_resumen(&b->monitor);
+        for (int i = 0; i < creados; i++) {
+            monitor_resumen(&b->monitor, i < NUM_PRODUCTORES ? 0 : 1,
+                            contextos[i].id, &contextos[i].progreso,
+                            contextos[i].items_a_procesar);
+        }
     }
     if (resultado == 0) printf("\n[OK] Todos los hilos concluyeron exitosamente.\n");
     return resultado;

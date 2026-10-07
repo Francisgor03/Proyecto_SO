@@ -13,6 +13,9 @@ typedef struct {
     pthread_cond_t cambio;
     unsigned long siguiente[2];
     unsigned long atendiendo[2];
+    bool visual;
+    bool color;
+    struct timespec inicio;
     bool iniciado;
     bool detenido;
 } monitor_t;
@@ -33,6 +36,7 @@ void monitor_liberar_turno(monitor_t *m, int tipo);
 void monitor_estado(monitor_t *m, int tipo, int id, const char *estado);
 void monitor_dato(monitor_t *m, int tipo, int id, int item, int posicion);
 void monitor_medir(progreso_t *p, const struct timespec *inicio);
-void monitor_resumen(monitor_t *m, int tipo, int id, const progreso_t *p);
+void monitor_tabla_resumen(monitor_t *m);
+void monitor_resumen(monitor_t *m, int tipo, int id, const progreso_t *p, int cuota);
 
 #endif

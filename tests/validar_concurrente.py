@@ -46,4 +46,8 @@ for key in keys:
     assert counts[key] == items, f'Cuota incompleta: {key}'
     assert states[key] == sequence, f'Transiciones inválidas: {key}'
     assert summaries[key][0] == items
-print(f'{p * items} datos únicos; {p + c} hilos completaron su cuota; espera máxima={max(v[1] for v in summaries.values()):.3f} ms')
+maximum_wait = max(v[1] for v in summaries.values())
+if len(sys.argv) > 2 and sys.argv[2] == '--tsv':
+    print(f'{p * items}\t{p + c}\t{maximum_wait:.3f}\t{p}\t{c}\t{items}\t{size}')
+else:
+    print(f'{p * items} datos únicos; {p + c} hilos completaron su cuota; espera máxima={maximum_wait:.3f} ms')

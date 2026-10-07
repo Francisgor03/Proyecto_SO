@@ -123,3 +123,11 @@ Validación realizada el 6 de octubre de 2026 (America/Lima), con GCC 15.2.0 y L
 La prueba de redirección de la shell también pasó. Se conservan los nombres `fase2_concurrente` y `fase2_concurrente_stress` para compatibilidad, aunque ahora integran el monitor de fase 3. Los binarios generados están ignorados en Git y `make clean` los elimina.
 
 La mayor espera individual registrada en la validación final fue 3.869 ms. La salida resumida de la suite y sus valores por ejecución se conservan en [evidencia_pruebas_fase3.txt](evidencia_pruebas_fase3.txt). Este máximo describe esa ejecución de la suite y puede variar al repetirla.
+
+## Presentación de las pruebas en terminal
+
+La salida de `make test` y `make test-stress` separa los escenarios con títulos y presenta una tabla por ejecución: estado, datos únicos verificados, hilos que completaron su cuota y espera máxima observada en milisegundos. Cada escenario termina con el total de datos y su mayor espera. Los comandos largos de compilación se ocultan por defecto y se reemplazan por `[COMPILAR] nombre`; los diagnósticos del compilador y los registros de una prueba fallida permanecen visibles.
+
+Para mostrar también los comandos completos, usar `make V=1 test-stress`. El indicador `OK` usa verde solamente en una terminal compatible; las salidas redirigidas quedan sin códigos de color. `NO_COLOR=1 make test-stress` desactiva el color. La presentación conserva las mismas validaciones de datos, cuotas y trazas.
+
+La ejecución directa de `./fase2_concurrente` en una terminal muestra la configuración, transiciones con tiempo relativo al inicio del monitor y una tabla final de cuotas y esperas por hilo. Los resúmenes se imprimen después de recoger todos los hilos. Los colores distinguen espera, sección crítica, terminación y error, y pueden desactivarse con `NO_COLOR=1 ./fase2_concurrente`. Al redirigir la salida se conserva el formato original de trazas y resúmenes para la validación automática; ese modo sigue publicando el resumen de cada hilo al terminar su rutina. Los tiempos de la columna de transiciones se toman al publicar cada evento y no representan despachos del kernel.
