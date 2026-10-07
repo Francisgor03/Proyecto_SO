@@ -5,126 +5,127 @@
 #include <string.h>
 
 static void pausar_milisegundos(long milisegundos) {
+    if (milisegundos == 0) return;
     struct timespec pausa = {
         .tv_sec = milisegundos / 1000,
         .tv_nsec = (milisegundos % 1000) * 1000000L
     };
-
-    while (nanosleep(&pausa, &pausa) == -1 && errno == EINTR) {
-    }
+    while (nanosleep(&pausa, &pausa) == -1 && errno == EINTR) {}
 }
 
 void inicializar_buffer(buffer_t *b) {
-    b->in = 0;
-    b->out = 0;
-    b->contador = 0;
-    for (int i = 0; i < BUFFER_SIZE; i++) {
-        b->datos[i] = 0;
+    b->in = b->out = b->contador = 0;
+    for (int i = 0; i < BUFFER_SIZE; i++) b->datos[i] = 0;
+}
+
+/* Solo la primera detención publica permisos de emergencia. Los hilos
+ * comprueban detenido antes de tocar el buffer; estos permisos no son datos. */
+static void detener(buffer_t *b) {
+    if (monitor_detener(&b->monitor)) {
+        for (int i = 0; i < NUM_PRODUCTORES; i++) sem_post(&b->sem_vacios);
+        for (int i = 0; i < NUM_CONSUMIDORES; i++) sem_post(&b->sem_llenos);
     }
 }
 
-void* rutina_productor(void *arg) {
-    contexto_hilo_t *ctx = (contexto_hilo_t *)arg;
+static int esperar(sem_t *semaforo) {
+    int resultado;
+    do {
+        resultado = sem_wait(semaforo);
+    } while (resultado != 0 && errno == EINTR);
+    return resultado;
+}
 
+static void *trabajar(contexto_hilo_t *ctx, int tipo) {
+    buffer_t *b = ctx->buffer;
+    sem_t *entrada = tipo == 0 ? &b->sem_vacios : &b->sem_llenos;
+    sem_t *salida = tipo == 0 ? &b->sem_llenos : &b->sem_vacios;
+    monitor_estado(&b->monitor, tipo, ctx->id, "LISTO");
     for (int i = 0; i < ctx->items_a_procesar; i++) {
-        int item = (ctx->id * 100) + (i + 1);
-
-        if (sem_wait(&ctx->buffer->sem_vacios) != 0) {
-            return NULL;
+        struct timespec inicio;
+        clock_gettime(CLOCK_MONOTONIC, &inicio);
+        monitor_estado(&b->monitor, tipo, ctx->id, "ESPERANDO RECURSO");
+        if (monitor_turno(&b->monitor, tipo) != 0 || esperar(entrada) != 0) {
+            ctx->error = 1;
+            break;
         }
-
-        if (pthread_mutex_lock(&ctx->buffer->mutex_buffer) != 0) {
-            sem_post(&ctx->buffer->sem_vacios);
-            return NULL;
+        if (monitor_detenido(&b->monitor)) {
+            ctx->error = 1;
+            break;
         }
-
-        int posicion = ctx->buffer->in;
-        ctx->buffer->datos[posicion] = item;
-        printf("[Productor %d] Inserto: %d en posicion [%d]\n", 
-               ctx->id, item, posicion);
-        ctx->buffer->in = (ctx->buffer->in + 1) % BUFFER_SIZE;
-        ctx->buffer->contador++;
-
-        pthread_mutex_unlock(&ctx->buffer->mutex_buffer);
-        sem_post(&ctx->buffer->sem_llenos);
-        pausar_milisegundos(100);
+        if (pthread_mutex_lock(&b->mutex_buffer) != 0) {
+            ctx->error = 1;
+            break;
+        }
+        monitor_medir(&ctx->progreso, &inicio);
+        monitor_estado(&b->monitor, tipo, ctx->id, "EN SECCION CRITICA");
+        int posicion = tipo == 0 ? b->in : b->out;
+        int item;
+        if (tipo == 0) {
+            item = (ctx->id - 1) * TOTAL_ITEMS + i + 1;
+            b->datos[posicion] = item;
+            b->in = (b->in + 1) % BUFFER_SIZE;
+            b->contador++;
+        } else {
+            item = b->datos[posicion];
+            b->out = (b->out + 1) % BUFFER_SIZE;
+            b->contador--;
+        }
+        if (b->contador < 0 || b->contador > BUFFER_SIZE) ctx->error = 1;
+        monitor_estado(&b->monitor, tipo, ctx->id, "LIBERANDO");
+        if (pthread_mutex_unlock(&b->mutex_buffer) != 0) {
+            /* Un mutex que no puede liberarse impide una recuperación segura. */
+            fprintf(stderr, "Error al liberar mutex del buffer\n");
+            exit(EXIT_FAILURE);
+        }
+        if (sem_post(salida) != 0) ctx->error = 1;
+        monitor_dato(&b->monitor, tipo, ctx->id, item, posicion);
+        if (ctx->error) break;
+        ctx->progreso.completadas++;
+        monitor_liberar_turno(&b->monitor, tipo);
+        pausar_milisegundos(tipo == 0 ? PAUSA_PRODUCTOR_MS : PAUSA_CONSUMIDOR_MS);
     }
-
-    return NULL;
+    if (ctx->error) detener(b);
+    monitor_estado(&b->monitor, tipo, ctx->id, ctx->error ? "ERROR" : "TERMINADO");
+    monitor_resumen(&b->monitor, tipo, ctx->id, &ctx->progreso);
+    return ctx->error ? ctx : NULL;
 }
 
-void* rutina_consumidor(void *arg) {
-    contexto_hilo_t *ctx = (contexto_hilo_t *)arg;
-
-    for (int i = 0; i < ctx->items_a_procesar; i++) {
-        if (sem_wait(&ctx->buffer->sem_llenos) != 0) {
-            return NULL;
-        }
-
-        if (pthread_mutex_lock(&ctx->buffer->mutex_buffer) != 0) {
-            sem_post(&ctx->buffer->sem_llenos);
-            return NULL;
-        }
-
-        int posicion = ctx->buffer->out;
-        int item = ctx->buffer->datos[posicion];
-        printf("    [Consumidor %d] Consumio: %d de posicion [%d]\n", 
-               ctx->id, item, posicion);
-        ctx->buffer->out = (ctx->buffer->out + 1) % BUFFER_SIZE;
-        ctx->buffer->contador--;
-
-        pthread_mutex_unlock(&ctx->buffer->mutex_buffer);
-        sem_post(&ctx->buffer->sem_vacios);
-        pausar_milisegundos(150);
-    }
-
-    return NULL;
-}
+void *rutina_productor(void *arg) { return trabajar(arg, 0); }
+void *rutina_consumidor(void *arg) { return trabajar(arg, 1); }
 
 int crear_y_esperar_hilos(buffer_t *b) {
-    pthread_t hilos_prod[NUM_PRODUCTORES];
-    pthread_t hilos_cons[NUM_CONSUMIDORES];
-    contexto_hilo_t ctx_prod[NUM_PRODUCTORES];
-    contexto_hilo_t ctx_cons[NUM_CONSUMIDORES];
-
-    // 1. Crear hilos Productores
-    for (int i = 0; i < NUM_PRODUCTORES; i++) {
-        ctx_prod[i].id = i + 1;
-        ctx_prod[i].buffer = b;
-        ctx_prod[i].items_a_procesar = TOTAL_ITEMS;
-        int error = pthread_create(&hilos_prod[i], NULL, rutina_productor, &ctx_prod[i]);
+    enum { TOTAL_HILOS = NUM_PRODUCTORES + NUM_CONSUMIDORES };
+    pthread_t hilos[TOTAL_HILOS];
+    contexto_hilo_t contextos[TOTAL_HILOS] = {0};
+    int creados = 0;
+    int resultado = 0;
+    for (int i = 0; i < TOTAL_HILOS; i++) {
+        int tipo = i < NUM_PRODUCTORES ? 0 : 1;
+        contextos[i].id = tipo == 0 ? i + 1 : i - NUM_PRODUCTORES + 1;
+        contextos[i].buffer = b;
+        contextos[i].items_a_procesar = TOTAL_ITEMS;
+        int error = pthread_create(&hilos[i], NULL,
+                                  tipo == 0 ? rutina_productor : rutina_consumidor,
+                                  &contextos[i]);
         if (error != 0) {
-            fprintf(stderr, "Error al crear hilo productor: %s\n", strerror(error));
-            return -1;
+            fprintf(stderr, "Error al crear hilo: %s\n", strerror(error));
+            resultado = -1;
+            detener(b);
+            break;
         }
+        creados++;
     }
-
-    // 2. Crear hilos Consumidores
-    for (int i = 0; i < NUM_CONSUMIDORES; i++) {
-        ctx_cons[i].id = i + 1;
-        ctx_cons[i].buffer = b;
-        ctx_cons[i].items_a_procesar = TOTAL_ITEMS;
-        int error = pthread_create(&hilos_cons[i], NULL, rutina_consumidor, &ctx_cons[i]);
+    if (resultado == 0) monitor_iniciar(&b->monitor);
+    for (int i = 0; i < creados; i++) {
+        void *retorno = NULL;
+        int error = pthread_join(hilos[i], &retorno);
         if (error != 0) {
-            fprintf(stderr, "Error al crear hilo consumidor: %s\n", strerror(error));
-            return -1;
+            fprintf(stderr, "Error al recoger hilo: %s\n", strerror(error));
+            exit(EXIT_FAILURE);
         }
+        if (retorno != NULL || contextos[i].progreso.completadas != TOTAL_ITEMS)
+            resultado = -1;
     }
-
-    // 3. Esperar finalizacion con pthread_join
-    for (int i = 0; i < NUM_PRODUCTORES; i++) {
-        void *resultado = NULL;
-        if (pthread_join(hilos_prod[i], &resultado) != 0 || resultado != NULL) {
-            return -1;
-        }
-    }
-    for (int i = 0; i < NUM_CONSUMIDORES; i++) {
-        void *resultado = NULL;
-        if (pthread_join(hilos_cons[i], &resultado) != 0 || resultado != NULL) {
-            return -1;
-        }
-    }
-
-    printf("\n[OK] Todos los hilos concluyeron exitosamente.\n");
-    return 0;
+    if (resultado == 0) printf("\n[OK] Todos los hilos concluyeron exitosamente.\n");
+    return resultado;
 }

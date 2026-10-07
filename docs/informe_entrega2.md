@@ -1,60 +1,125 @@
-# Informe de la Entrega 2
+# Informe de la Entrega 2 — Fase 3
 
-## Diseño concurrente
+## Diseño e integración
 
-Se implementó el problema Productor–Consumidor con un buffer circular de cinco espacios. Los hilos productores y consumidores se crean con pthread_create; el hilo principal espera su terminación con pthread_join.
+El programa resuelve productor–consumidor con buffer circular acotado. Conserva el núcleo POSIX de las fases 1 y 2: `sem_vacios` comienza en `BUFFER_SIZE`, `sem_llenos` en cero y `mutex_buffer` protege datos, índices y contador. La configuración normal tiene dos productores, dos consumidores, seis operaciones por hilo y cinco posiciones.
 
-El semáforo sem_vacios cuenta los espacios disponibles y comienza con el tamaño del buffer. El semáforo sem_llenos cuenta los elementos disponibles y comienza en cero. El mutex mutex_buffer protege el arreglo, los índices in y out, y el contador.
+`src/monitor.c` añade dos colas de turnos FIFO, una por tipo de hilo, un inicio coordinado, detención por error, logger y mediciones individuales. Su interfaz está en `include/monitor.h`. Todos los hilos creados esperan el inicio; el principal lo habilita únicamente después de crear el conjunto completo. Ante un fallo de creación se despiertan y recogen los hilos ya creados, antes de destruir los recursos y sus contextos.
 
-El productor espera un espacio con sem_wait antes de tomar el mutex. Dentro de la sección crítica, inserta un elemento y actualiza el índice y el contador. Después libera el mutex y publica el elemento con sem_post(sem_llenos). El consumidor sigue el orden complementario: espera un elemento, toma el mutex, extrae el elemento, actualiza el índice y el contador, libera el mutex y publica un espacio con sem_post(sem_vacios).
+Cada operación sigue esta secuencia:
 
-## Diagrama de estados de los hilos
+1. Registrar `ESPERANDO RECURSO` y obtener un ticket en la cola de su tipo.
+2. Esperar su turno mediante una variable de condición, que libera el mutex del monitor durante la espera. Las guardas se revisan en un bucle para admitir despertares espurios.
+3. Soltar el mutex del monitor, esperar el semáforo correspondiente y comprobar la detención.
+4. Tomar `mutex_buffer`, registrar `EN SECCION CRITICA`, modificar el buffer y comprobar `0 <= contador <= BUFFER_SIZE`.
+5. Registrar `LIBERANDO`, soltar `mutex_buffer` y publicar el semáforo complementario.
+6. Registrar el dato fuera del mutex del buffer, incrementar el progreso y avanzar el turno de su tipo. La pausa configurable ocurre después de liberar los recursos.
 
-Cada transición usa la forma evento(argumentos)[guarda]/acción.
+El turno es una autorización lógica, no un mutex retenido durante `sem_wait`. Como productores y consumidores tienen colas independientes, un productor que espera espacio no impide que avance un consumidor, y viceversa.
 
-    INICIO
-      |
-crearHilo(id)[hiloCreado]/encolar 
-      | 
-      v
-    LISTO --despachar(id)[CPUDisponible]/asignarCPU--> EJECUTANDO
-                                                            |
-                                  +-------------------------+----------------------+
-                                  |                                                |
-              esperarEspacio(id)[sem_vacios==0]/bloquear         esperarElemento(id)[sem_llenos==0]/bloquear
-                                  |                                                |
-                                  +--------------------> BLOQUEADO <---------------+
-                                                            |
-                                    semPostVacios()[productorEnEspera]/despertarProductor
-                                    semPostLlenos()[consumidorEnEspera]/despertarConsumidor
-                                                            |
-                                                            v
-                                                          LISTO
- 
-                     EJECUTANDO --completarIteraciones(id)[itemsProcesados==TOTAL_ITEMS]/terminar--> TERMINADO
+Los identificadores de datos son `(id_productor - 1) * TOTAL_ITEMS + iteracion + 1`: los intervalos de cada productor son disjuntos incluso al superar 100 operaciones. La compilación rechaza buffer vacío, cantidades no positivas, cantidades distintas de productores y consumidores, pausas negativas e identificadores que excedan el rango previsto de `int`. Esta implementación asigna la misma cuota positiva a cada hilo y requiere cantidades equilibradas.
 
-El estado BLOQUEADO representa una espera normal: el productor espera cuando el buffer está lleno y el consumidor cuando está vacío. Cuando se publica el semáforo que esperaba, el hilo vuelve al estado LISTO.
+## Estados y trazabilidad
 
-## Prevención de interbloqueos
+```mermaid
+stateDiagram-v2
+    [*] --> Listo: pthread_create
+    Listo --> Ejecutando: despacho del SO
+    Ejecutando --> Listo: desalojo de CPU
+    Ejecutando --> Bloqueado: espera de inicio, turno, semáforo o mutex
+    Bloqueado --> Listo: inicio, avance de turno, sem_post o mutex disponible
+    Ejecutando --> Terminado: cuota completada
+    Bloqueado --> Listo: detención por error
+    Ejecutando --> Error: error de operación o detención
+    Error --> Terminado: retorno y pthread_join
+    Terminado --> [*]
+```
 
-Los hilos esperan en su semáforo antes de adquirir mutex_buffer. Ninguno espera un semáforo mientras mantiene el mutex, y el buffer utiliza un solo mutex. Cada hilo libera el mutex antes de publicar el semáforo complementario.
+Listo, Ejecutando y Bloqueado describen el modelo de planificación. El programa registra sus propios eventos; no observa directamente cada despacho o desalojo del kernel. `ESPERANDO RECURSO` indica que empieza a adquirir recursos, aunque estos podrían estar inmediatamente disponibles.
 
-Por este orden no se forma una espera circular entre mutexes: un hilo que espera espacio o elementos no retiene mutex_buffer, y el hilo que posee el mutex puede terminar su sección crítica y liberarlo. La espera en sem_wait corresponde a esperar un recurso que puede producir el otro tipo de hilo; por sí sola no indica un interbloqueo.
+Ejemplo de una operación:
 
-## Evidencia empírica
+```text
+[HILO Productor 1] -> ESTADO: ESPERANDO RECURSO
+[HILO Productor 1] -> ESTADO: EN SECCION CRITICA
+[HILO Productor 1] -> ESTADO: LIBERANDO
+[Productor 1] Inserto: 1 en posicion [0]
+```
 
-Se ejecutó la prueba automatizada con el comando:
+El tipo y el ID identifican cada hilo sin ambigüedad. El logger usa un mutex propio para publicar líneas completas; la salida tiene buffering por línea, incluso al redirigirla. Solo se imprimen dos transiciones breves dentro del mutex del buffer, sin pausas artificiales. Los datos y resúmenes se imprimen fuera. Un consumidor puede publicar el registro de un dato antes del registro de inserción de ese dato, porque el productor publica el semáforo antes de registrar el dato. Por eso la prueba compara conjuntos y valida el orden de estados de cada hilo, sin interpretar el orden global de líneas como el orden de modificación del buffer.
 
-    make -B test-stress
+Al finalizar, cada hilo imprime operaciones completadas, espera total y espera máxima en milisegundos. La espera se mide con `CLOCK_MONOTONIC` desde antes de registrar la solicitud hasta la adquisición del mutex del buffer; incluye inicio, turno, semáforo, mutex y el costo de esa primera traza. No incluye las pausas posteriores a la operación. Los valores son observaciones, no límites garantizados.
 
-La prueba compiló una configuración con 10 productores y 10 consumidores, con seis elementos por hilo. En cada ejecución verificó que el programa terminara antes de 10 segundos, que apareciera el mensaje de finalización de los hilos, que se produjeran y consumieran 60 elementos, y que los valores producidos coincidieran con los consumidos. El programa también devuelve error si el contador final del buffer no es cero.
+## Exclusión mutua y condiciones de Coffman
 
-Resultado observado: las 20 ejecuciones terminaron correctamente. Ninguna excedió el límite de tiempo y en todas coincidieron los elementos producidos y consumidos.
+La exclusión mutua se mantiene: un solo hilo modifica el buffer a la vez. La falta de apropiación también se mantiene para el mutex. La estrategia rompe la espera circular mediante un orden de recursos y la ausencia de retención de mutexes al esperar semáforos:
 
-Este resultado aporta evidencia empírica para la configuración probada. Se complementa con la explicación del orden de adquisición y liberación de los recursos para sustentar la prevención de interbloqueos. No se afirma haber demostrado la ausencia de inanición.
+- El mutex del monitor solo protege tickets y banderas; se suelta antes de adquirir semáforos o `mutex_buffer`.
+- Un hilo espera `sem_vacios` o `sem_llenos` antes de tomar `mutex_buffer`. Nunca espera un semáforo reteniendo ese mutex.
+- La única adquisición anidada de mutexes es `mutex_buffer -> logger`. El logger no solicita el buffer ni el monitor, por lo que no existe la arista inversa.
+- El avance de tickets toma el mutex del monitor después de liberar buffer y logger. La variable de condición libera ese mutex al bloquearse.
 
-## Reproducción
+Por tanto, el grafo de dependencias entre mutexes no contiene ciclos. Un titular de `mutex_buffer` puede terminar la modificación sin necesitar un recurso retenido por quien espera ese mutex. La salida debe seguir siendo atendida para que el logger progrese; no se contempla un destino de salida permanentemente bloqueado.
 
-Desde la raíz del proyecto, se puede repetir la prueba con:
+Además, las colas por tipo no introducen un ciclo lógico. Si un productor con turno está bloqueado por buffer lleno, existe un dato consumible o una operación consumidora en curso que publicará un espacio. Si un consumidor con turno está bloqueado por buffer vacío, existe capacidad para un productor o una operación productora en curso que publicará un dato. Con `BUFFER_SIZE > 0`, ambas condiciones no pueden impedir simultáneamente todo progreso. Una reserva de permiso está seguida de una sección finita y de la publicación complementaria.
 
-    make -B test-stress
+Durante la ejecución normal, cada inserción corresponde a una reserva de espacio y cada extracción a una reserva de dato. Los permisos reservados o pendientes de publicación explican por qué no se debe exigir `sem_vacios + sem_llenos == BUFFER_SIZE` en todo instante. El invariante relevante del buffer es `0 <= contador <= BUFFER_SIZE`. Al terminar las cuotas equilibradas se espera `contador == 0`.
+
+Estos argumentos presuponen planificación que permita avanzar a los hilos habilitados, operaciones de sincronización correctas y secciones finitas. No requieren `pthread_mutex_trylock`: la ruptura de espera circular ya está incorporada en el orden de adquisición.
+
+## Inanición y alcance de la equidad
+
+El monitor asigna tickets crecientes bajo mutex. Para cada tipo solo opera el ticket `atendiendo`; este avanza una vez por operación completada. Un hilo con ticket asignado no puede ser adelantado por solicitudes posteriores de su mismo tipo. Hay a lo sumo `N_tipo - 1` operaciones del mismo tipo delante de una solicitud, porque cada hilo tiene una única solicitud pendiente.
+
+Con cuotas equilibradas, progreso del tipo complementario, planificación justa y adquisición eventual de los mutexes, cada ticket pendiente termina siendo atendido. La política evita que un hilo rápido adelante repetidamente a otro que ya está encolado. No promete un tiempo máximo de espera ni garantiza que el SO planifique un hilo que aún no logró solicitar ticket. No se atribuye equidad universal a los semáforos POSIX.
+
+Las pruebas comprueban que **cada hilo**, incluidos los de los escenarios de velocidades diferentes, termina su cuota. Esto aporta evidencia empírica de ausencia de inanición en las ejecuciones observadas; una batería finita no demuestra una garantía universal del planificador.
+
+## Manejo de errores
+
+`sem_wait` reintenta `EINTR`. Otros errores detienen el monitor y se propagan como fallo del hilo y del proceso. La primera detención despierta las colas y publica permisos de emergencia para desbloquear las esperas de semáforo. Los hilos comprueban la detención antes de tocar el buffer; dichos permisos no representan datos y solo se usan para terminar la ejecución fallida. El principal recoge todos los hilos creados antes de destruir recursos. No se declara éxito ni se exige buffer vacío en una ejecución abortada.
+
+Un fallo de `pthread_join` o al liberar el mutex del buffer termina el proceso con error: no es seguro continuar destruyendo recursos si no se puede confirmar la recolección o liberación. La recuperación cooperativa comprobada cubre creación parcial y errores de espera; no intenta recuperar corrupción de objetos de sincronización.
+
+## Compilación y reproducción
+
+Se requieren GCC, make, Bash, Python 3 y `timeout` de GNU coreutils. Los flags son `-Wall -Wextra -std=c11 -pedantic -D_POSIX_C_SOURCE=200809L`, con `-pthread` al compilar y enlazar todos los binarios concurrentes. Las herramientas ya estaban disponibles en Ubuntu; no fue necesario instalarlas.
+
+```bash
+make clean
+make
+make test
+```
+
+`make test` incluye redirección de la shell, configuración concurrente normal, estrés, velocidades distintas y fallos inyectados. Las reglas independientes son `test-shell`, `test-concurrent`, `test-stress` y `test-fallos`. `make concurrent` muestra la ejecución normal.
+
+```bash
+# Cambiar la cantidad de ejecuciones del escenario de alta contención:
+RUNS=40 make test-stress
+# Ejecutar directamente un binario con un límite distinto:
+RUNS=5 LIMIT=20s bash tests/test_stress_concurrente.sh ./fase2_concurrente_stress
+```
+
+Los escenarios asimétricos ejecutan tres repeticiones cada uno. Todos los escenarios tienen timeout externo; el límite predeterminado es 15 segundos por proceso. La configuración esperada se obtiene de `[CONFIG]` del propio binario y se comprueba con `tests/validar_concurrente.py`, sin cantidades fijas desfasadas en el script.
+
+La validación comprueba finalización exitosa, buffer final vacío, cuotas individuales, secuencia de todas las transiciones por hilo, un resumen por hilo, posiciones válidas, métricas no negativas, identificadores únicos y coincidencia exacta entre datos producidos y consumidos. El binario también comprueba el rango del contador después de cada modificación.
+
+La inyección de fallos está en `tests/fallos_concurrente.c` y solo se enlaza en `fase3_fallos` usando `--wrap` de GNU ld. Interrumpe la primera espera de cada hilo con `EINTR`, provoca `EAGAIN` en la cuarta creación y provoca `EIO` en la primera espera. Las dos ejecuciones fallidas deben devolver código 1 antes del timeout; se verifican los resúmenes de todos los hilos creados. La creación parcial debe terminar sin insertar ni consumir datos.
+
+## Resultados observados en Ubuntu
+
+Validación realizada el 6 de octubre de 2026 (America/Lima), con GCC 15.2.0 y Linux 7.0.0-31-generic.
+
+| Escenario | Productores / consumidores | Buffer | Operaciones por hilo | Pausas productor / consumidor | Repeticiones | Resultado |
+| --- | --- | --- | --- | --- | --- | --- |
+| Normal | 2 / 2 | 5 | 6 | 100 / 150 ms | 1 | 12 datos únicos; todos los hilos completaron |
+| Alta contención | 10 / 10 | 1 | 1000 | 0 / 0 ms | 20 | 200 000 datos en total; sin pérdidas, duplicados ni timeout |
+| Productor lento | 10 / 10 | 5 | 100 | 1 / 0 ms | 3 | 3000 datos en total; todas las cuotas completas |
+| Consumidor lento | 10 / 10 | 5 | 100 | 0 / 1 ms | 3 | 3000 datos en total; todas las cuotas completas |
+| Interrupción de espera | 2 / 2 | 5 | 6 | 0 / 0 ms | 1 | Reintento de EINTR; 12 datos correctos |
+| Creación parcial | 2 / 2 | 5 | 6 | 0 / 0 ms | 1 | Código 1; tres hilos recogidos; cero operaciones |
+| Error de espera | 2 / 2 | 5 | 6 | 0 / 0 ms | 1 | Código 1; cuatro hilos recogidos; sin bloqueo |
+
+La prueba de redirección de la shell también pasó. Se conservan los nombres `fase2_concurrente` y `fase2_concurrente_stress` para compatibilidad, aunque ahora integran el monitor de fase 3. Los binarios generados están ignorados en Git y `make clean` los elimina.
+
+La mayor espera individual registrada en la validación final fue 3.869 ms. La salida resumida de la suite y sus valores por ejecución se conservan en [evidencia_pruebas_fase3.txt](evidencia_pruebas_fase3.txt). Este máximo describe esa ejecución de la suite y puede variar al repetirla.
