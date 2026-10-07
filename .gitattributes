@@ -1,0 +1,13 @@
+# Forzar LF en scripts de shell para que funcionen en WSL/Linux
+*.sh text eol=lf
+
+# Archivos de texto normales: Git decide según la plataforma
+*.c   text
+*.h   text
+*.md  text
+Makefile text
+
+# Binarios: sin conversión
+mi_shell        binary
+fase2_concurrente binary
+fase2_concurrente_stress binary
