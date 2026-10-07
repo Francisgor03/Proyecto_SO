@@ -16,10 +16,17 @@ int inicializar_sincronizacion(buffer_t *b) {
         return -1;
     }
 
+    if (monitor_inicializar(&b->monitor) != 0) {
+        pthread_mutex_destroy(&b->mutex_buffer);
+        sem_destroy(&b->sem_llenos);
+        sem_destroy(&b->sem_vacios);
+        return -1;
+    }
     return 0;
 }
 
 void destruir_sincronizacion(buffer_t *b) {
+    monitor_destruir(&b->monitor);
     pthread_mutex_destroy(&b->mutex_buffer);
     sem_destroy(&b->sem_llenos);
     sem_destroy(&b->sem_vacios);

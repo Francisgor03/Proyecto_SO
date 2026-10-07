@@ -1,2 +1,8 @@
 mi_shell
 *.o
+
+fase2_concurrente
+fase2_concurrente_stress
+fase3_productor_lento
+fase3_consumidor_lento
+fase3_fallos

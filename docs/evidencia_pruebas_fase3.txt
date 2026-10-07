@@ -1,0 +1,52 @@
+Validación del 6 de octubre de 2026 (America/Lima)
+GCC 15.2.0; Linux 7.0.0-31-generic
+Comandos previos exitosos: make clean; make
+Salida de make test (código de salida 0):
+
+printf 'contenido de prueba\n' > /tmp/mi_shell_entrada.txt
+printf 'cat < /tmp/mi_shell_entrada.txt > /tmp/mi_shell_salida.txt\nexit\n' | ./mi_shell
+coreos$ coreos$ cmp /tmp/mi_shell_entrada.txt /tmp/mi_shell_salida.txt
+Prueba de redireccion: OK
+RUNS=1 bash tests/test_stress_concurrente.sh ./fase2_concurrente
+Ejecución 1/1: OK; 12 datos únicos; 4 hilos completaron su cuota; espera máxima=0.042 ms
+PRUEBA SUPERADA: 1 ejecuciones de ./fase2_concurrente (límite 15s por ejecución).
+gcc -Iinclude -Wall -Wextra -std=c11 -pedantic -D_POSIX_C_SOURCE=200809L -DNUM_PRODUCTORES=10 -DNUM_CONSUMIDORES=10 -DTOTAL_ITEMS=1000 -DBUFFER_SIZE=1 -DPAUSA_PRODUCTOR_MS=0 -DPAUSA_CONSUMIDOR_MS=0 -pthread src/main_concurrente.c src/hilos.c src/sincronizacion.c src/monitor.c -o fase2_concurrente_stress
+gcc -Iinclude -Wall -Wextra -std=c11 -pedantic -D_POSIX_C_SOURCE=200809L -pthread -DNUM_PRODUCTORES=10 -DNUM_CONSUMIDORES=10 -DTOTAL_ITEMS=100 -DPAUSA_PRODUCTOR_MS=1 -DPAUSA_CONSUMIDOR_MS=0 src/main_concurrente.c src/hilos.c src/sincronizacion.c src/monitor.c -o fase3_productor_lento
+gcc -Iinclude -Wall -Wextra -std=c11 -pedantic -D_POSIX_C_SOURCE=200809L -pthread -DNUM_PRODUCTORES=10 -DNUM_CONSUMIDORES=10 -DTOTAL_ITEMS=100 -DPAUSA_PRODUCTOR_MS=0 -DPAUSA_CONSUMIDOR_MS=1 src/main_concurrente.c src/hilos.c src/sincronizacion.c src/monitor.c -o fase3_consumidor_lento
+bash tests/test_stress_concurrente.sh ./fase2_concurrente_stress
+Ejecución 1/20: OK; 10000 datos únicos; 20 hilos completaron su cuota; espera máxima=1.206 ms
+Ejecución 2/20: OK; 10000 datos únicos; 20 hilos completaron su cuota; espera máxima=0.840 ms
+Ejecución 3/20: OK; 10000 datos únicos; 20 hilos completaron su cuota; espera máxima=1.418 ms
+Ejecución 4/20: OK; 10000 datos únicos; 20 hilos completaron su cuota; espera máxima=0.936 ms
+Ejecución 5/20: OK; 10000 datos únicos; 20 hilos completaron su cuota; espera máxima=3.869 ms
+Ejecución 6/20: OK; 10000 datos únicos; 20 hilos completaron su cuota; espera máxima=1.701 ms
+Ejecución 7/20: OK; 10000 datos únicos; 20 hilos completaron su cuota; espera máxima=1.019 ms
+Ejecución 8/20: OK; 10000 datos únicos; 20 hilos completaron su cuota; espera máxima=1.124 ms
+Ejecución 9/20: OK; 10000 datos únicos; 20 hilos completaron su cuota; espera máxima=1.513 ms
+Ejecución 10/20: OK; 10000 datos únicos; 20 hilos completaron su cuota; espera máxima=1.556 ms
+Ejecución 11/20: OK; 10000 datos únicos; 20 hilos completaron su cuota; espera máxima=0.977 ms
+Ejecución 12/20: OK; 10000 datos únicos; 20 hilos completaron su cuota; espera máxima=1.167 ms
+Ejecución 13/20: OK; 10000 datos únicos; 20 hilos completaron su cuota; espera máxima=1.099 ms
+Ejecución 14/20: OK; 10000 datos únicos; 20 hilos completaron su cuota; espera máxima=1.375 ms
+Ejecución 15/20: OK; 10000 datos únicos; 20 hilos completaron su cuota; espera máxima=1.728 ms
+Ejecución 16/20: OK; 10000 datos únicos; 20 hilos completaron su cuota; espera máxima=0.857 ms
+Ejecución 17/20: OK; 10000 datos únicos; 20 hilos completaron su cuota; espera máxima=2.137 ms
+Ejecución 18/20: OK; 10000 datos únicos; 20 hilos completaron su cuota; espera máxima=1.137 ms
+Ejecución 19/20: OK; 10000 datos únicos; 20 hilos completaron su cuota; espera máxima=1.123 ms
+Ejecución 20/20: OK; 10000 datos únicos; 20 hilos completaron su cuota; espera máxima=1.439 ms
+PRUEBA SUPERADA: 20 ejecuciones de ./fase2_concurrente_stress (límite 15s por ejecución).
+RUNS=3 bash tests/test_stress_concurrente.sh ./fase3_productor_lento
+Ejecución 1/3: OK; 1000 datos únicos; 20 hilos completaron su cuota; espera máxima=1.115 ms
+Ejecución 2/3: OK; 1000 datos únicos; 20 hilos completaron su cuota; espera máxima=1.122 ms
+Ejecución 3/3: OK; 1000 datos únicos; 20 hilos completaron su cuota; espera máxima=1.204 ms
+PRUEBA SUPERADA: 3 ejecuciones de ./fase3_productor_lento (límite 15s por ejecución).
+RUNS=3 bash tests/test_stress_concurrente.sh ./fase3_consumidor_lento
+Ejecución 1/3: OK; 1000 datos únicos; 20 hilos completaron su cuota; espera máxima=1.450 ms
+Ejecución 2/3: OK; 1000 datos únicos; 20 hilos completaron su cuota; espera máxima=1.090 ms
+Ejecución 3/3: OK; 1000 datos únicos; 20 hilos completaron su cuota; espera máxima=1.116 ms
+PRUEBA SUPERADA: 3 ejecuciones de ./fase3_consumidor_lento (límite 15s por ejecución).
+gcc -Iinclude -Wall -Wextra -std=c11 -pedantic -D_POSIX_C_SOURCE=200809L -pthread -DPAUSA_PRODUCTOR_MS=0 -DPAUSA_CONSUMIDOR_MS=0 src/main_concurrente.c src/hilos.c src/sincronizacion.c src/monitor.c tests/fallos_concurrente.c -Wl,--wrap=pthread_create -Wl,--wrap=sem_wait -o fase3_fallos
+bash tests/test_fallos_concurrente.sh ./fase3_fallos
+12 datos únicos; 4 hilos completaron su cuota; espera máxima=0.028 ms
+Recuperación ante fallo de crear: OK
+Recuperación ante fallo de esperar: OK
