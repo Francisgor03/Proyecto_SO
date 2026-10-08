@@ -19,10 +19,16 @@ FILOSOFOS_TARGET := fase2_filosofos
 FILOSOFOS_SOURCES := src/main_filosofos.c src/filosofos.c
 FILOSOFOS_STRESS_TARGET := fase2_filosofos_stress
 FILOSOFOS_HEADERS := include/filosofos.h
+RW_TARGET := fase2_lectores_escritores
+RW_SOURCES := src/main_lectores_escritores.c src/lectores_escritores.c
+RW_HEADERS := include/lectores_escritores.h
+PELUQUERO_TARGET := fase2_peluquero
+PELUQUERO_SOURCES := src/main_peluquero.c src/peluquero.c
+PELUQUERO_HEADERS := include/peluquero.h
 
-.PHONY: all run concurrent filosofos test test-shell test-concurrent test-stress test-fallos test-filosofos clean
+.PHONY: all run concurrent filosofos lectores-escritores peluquero test test-shell test-concurrent test-stress test-fallos test-filosofos test-lectores-escritores test-peluquero clean
 
-all: $(TARGET) $(CONCURRENT_TARGET) $(FILOSOFOS_TARGET)
+all: $(TARGET) $(CONCURRENT_TARGET) $(FILOSOFOS_TARGET) $(RW_TARGET) $(PELUQUERO_TARGET)
 
 $(TARGET): $(OBJECTS)
 	@printf "[COMPILAR] %s\n" "$@"
@@ -58,7 +64,15 @@ $(FILOSOFOS_TARGET): $(FILOSOFOS_SOURCES) $(FILOSOFOS_HEADERS)
 
 $(FILOSOFOS_STRESS_TARGET): $(FILOSOFOS_SOURCES) $(FILOSOFOS_HEADERS)
 	@printf "[COMPILAR] %s\n" "$@"
-	$(CC) $(CPPFLAGS) $(CFLAGS) -pthread -DNUM_FILOSOFOS=10 -DRONDAS_FILOSOFO=500 -DPAUSA_COMER_MS=0 -DPAUSA_PENSAR_MS=0 $(FILOSOFOS_SOURCES) -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) -pthread -DNUM_FILOSOFOS=5 -DRONDAS_FILOSOFO=500 -DPAUSA_COMER_MS=0 -DPAUSA_PENSAR_MS=0 $(FILOSOFOS_SOURCES) -o $@
+
+$(RW_TARGET): $(RW_SOURCES) $(RW_HEADERS)
+	@printf "[COMPILAR] %s\n" "$@"
+	$(CC) $(CPPFLAGS) $(CFLAGS) -pthread $(RW_SOURCES) -o $@
+
+$(PELUQUERO_TARGET): $(PELUQUERO_SOURCES) $(PELUQUERO_HEADERS)
+	@printf "[COMPILAR] %s\n" "$@"
+	$(CC) $(CPPFLAGS) $(CFLAGS) -pthread $(PELUQUERO_SOURCES) -o $@
 
 concurrent: $(CONCURRENT_TARGET)
 	./$(CONCURRENT_TARGET)
@@ -66,10 +80,16 @@ concurrent: $(CONCURRENT_TARGET)
 filosofos: $(FILOSOFOS_TARGET)
 	./$(FILOSOFOS_TARGET)
 
+lectores-escritores: $(RW_TARGET)
+	./$(RW_TARGET)
+
+peluquero: $(PELUQUERO_TARGET)
+	./$(PELUQUERO_TARGET)
+
 run: $(TARGET)
 	./$(TARGET)
 
-test: test-shell test-concurrent test-stress test-fallos test-filosofos
+test: test-shell test-concurrent test-stress test-fallos test-filosofos test-lectores-escritores test-peluquero
 	@printf "\n[OK] Suite completa: todas las pruebas superadas.\n"
 
 test-shell: $(TARGET)
@@ -94,9 +114,16 @@ test-fallos: fase3_fallos
 test-filosofos: $(FILOSOFOS_STRESS_TARGET)
 	@printf "\n=== FILOSOFOS COMENSALES: PRUEBA NORMAL ===\n"
 	RUNS=1 bash tests/test_filosofos.sh ./$(FILOSOFOS_TARGET) "FILOSOFOS NORMAL"
-	@printf "\n=== FILOSOFOS COMENSALES: ESTRES (10 filosofos, 500 rondas) ===\n"
+	@printf "\n=== FILOSOFOS COMENSALES: ESTRES (5 filosofos, 500 rondas) ===\n"
 	bash tests/test_filosofos.sh ./$(FILOSOFOS_STRESS_TARGET) "FILOSOFOS ESTRES"
+
+test-lectores-escritores: $(RW_TARGET)
+	bash tests/test_lectores_escritores.sh ./$(RW_TARGET)
+
+test-peluquero: $(PELUQUERO_TARGET)
+	bash tests/test_peluquero.sh ./$(PELUQUERO_TARGET)
 
 clean:
 	rm -f $(TARGET) $(CONCURRENT_TARGET) $(STRESS_TARGET) $(EXTRA_TARGETS) \
-	       $(FILOSOFOS_TARGET) $(FILOSOFOS_STRESS_TARGET) $(OBJECTS)
+	       $(FILOSOFOS_TARGET) $(FILOSOFOS_STRESS_TARGET) $(RW_TARGET) \
+	       $(PELUQUERO_TARGET) $(OBJECTS)

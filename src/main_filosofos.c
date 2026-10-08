@@ -11,6 +11,7 @@
  */
 
 #include "filosofos.h"
+#include <stdio.h>
 #include <unistd.h>
 
 int main(void) {
@@ -23,8 +24,8 @@ int main(void) {
                NUM_FILOSOFOS, RONDAS_FILOSOFO);
         printf("  Pausa comer: %d ms | Pausa pensar: %d ms\n",
                PAUSA_COMER_MS, PAUSA_PENSAR_MS);
-        printf("\n  Anti-deadlock: Monitor POSIX con una variable de\n");
-        printf("  condicion por filosofo (rompe espera circular de Coffman).\n");
+        printf("\n  Anti-deadlock: cinco tenedores mutex y adquisicion asimetrica.\n");
+        printf("  El filosofo 4 toma primero el tenedor derecho.\n");
         printf("\n=== TRANSICIONES EN VIVO ===\n");
         printf("  %9s  %-14s  %s\n", "Tiempo ms", "Participante", "Estado / accion");
         printf("  ---------------------------------------------------------\n");

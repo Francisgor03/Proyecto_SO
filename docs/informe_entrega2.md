@@ -2,7 +2,9 @@
 
 > **Problemas clásicos de IPC implementados:**
 > 1. **Productor–Consumidor con buffer acotado** (semáforos POSIX + mutex + monitor de turnos)
-> 2. **Filósofos Comensales** (monitor POSIX con variable de condición por filósofo)
+> 2. **Filósofos Comensales** (cinco mutexes de tenedores y adquisición asimétrica)
+> 3. **Lectores-Escritores** (turnstile justo y acceso concurrente de lectores)
+> 4. **Barbero Dormilón** (semáforos de clientes/barbero y sillas limitadas)
 >
 > Ambos demuestran control absoluto de *race conditions* y regiones críticas con pthreads.
 
@@ -142,6 +144,25 @@ La ejecución directa de `./fase2_concurrente` en una terminal muestra la config
 
 ## Problema 2 — Filósofos Comensales (`src/filosofos.c`)
 
+La implementación usa exactamente cinco mutexes, uno por tenedor. Cada filósofo
+adquiere sus dos tenedores antes de comer; cuatro toman primero el izquierdo y
+el filósofo 4 toma primero el derecho, rompiendo la espera circular descrita en
+el video. Un mutex de turno protege la adquisición del par y evita que un
+filósofo sea adelantado indefinidamente. Los tenedores se liberan siempre al
+terminar la sección crítica.
+
+## Problemas 3 y 4 — Lectores-Escritores y Barbero Dormilón
+
+`src/lectores_escritores.c` implementa lectores concurrentes y escritores
+exclusivos. El contador de lectores está protegido por `count_mutex`; el primer
+lector bloquea el recurso y el último lo libera. `turnstile` impide que nuevos
+lectores adelanten a un escritor que ya está esperando, evitando inanición.
+
+`src/peluquero.c` implementa un barbero que duerme en `sem_clientes`, una cola
+limitada por `N_SILLAS` y clientes que se retiran cuando no hay espacio. El
+mutex protege la decisión de sentarse y los semáforos coordinan el despertar y
+la atención.
+
 ### Enunciado clásico (Dijkstra, 1965)
 
 Cinco filósofos comparten una mesa circular. Entre cada par de filósofos hay un tenedor, cinco en total. Para comer, un filósofo necesita los dos tenedores adyacentes a su asiento. Si todos tomaran primero el tenedor izquierdo y esperaran el derecho, se produciría un **deadlock** circular donde ninguno avanza.
@@ -275,4 +296,3 @@ gcc -Iinclude -Wall -Wextra -std=c11 -D_POSIX_C_SOURCE=200809L \
 | Estrés | 10 | 500 | 0 / 0 ms | 10 | 5000 rondas por filósofo, sin deadlock ni race |
 
 La prueba de estrés con 10 filósofos y 0 ms de pausa genera la máxima contención posible: cada filósofo intenta comer tan pronto como puede, sometiendo el monitor a miles de adquisiciones concurrentes del mutex. Ningún filósofo ha quedado bloqueado permanentemente en ninguna de las ejecuciones registradas.
-
