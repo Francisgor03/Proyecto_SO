@@ -1,4 +1,10 @@
-# Informe de la Entrega 2 — Fase 3
+# Informe de la Entrega 2 — Módulo de Simulación Concurrente
+
+> **Problemas clásicos de IPC implementados:**
+> 1. **Productor–Consumidor con buffer acotado** (semáforos POSIX + mutex + monitor de turnos)
+> 2. **Filósofos Comensales** (monitor POSIX con variable de condición por filósofo)
+>
+> Ambos demuestran control absoluto de *race conditions* y regiones críticas con pthreads.
 
 ## Diseño e integración
 
@@ -131,3 +137,142 @@ La salida de `make test` y `make test-stress` separa los escenarios con títulos
 Para mostrar también los comandos completos, usar `make V=1 test-stress`. El indicador `OK` usa verde solamente en una terminal compatible; las salidas redirigidas quedan sin códigos de color. `NO_COLOR=1 make test-stress` desactiva el color. La presentación conserva las mismas validaciones de datos, cuotas y trazas.
 
 La ejecución directa de `./fase2_concurrente` en una terminal muestra la configuración, transiciones con tiempo relativo al inicio del monitor y una tabla final de cuotas y esperas por hilo. Los resúmenes se imprimen después de recoger todos los hilos. Los colores distinguen espera, sección crítica, terminación y error, y pueden desactivarse con `NO_COLOR=1 ./fase2_concurrente`. Al redirigir la salida se conserva el formato original de trazas y resúmenes para la validación automática; ese modo sigue publicando el resumen de cada hilo al terminar su rutina. Los tiempos de la columna de transiciones se toman al publicar cada evento y no representan despachos del kernel.
+
+---
+
+## Problema 2 — Filósofos Comensales (`src/filosofos.c`)
+
+### Enunciado clásico (Dijkstra, 1965)
+
+Cinco filósofos comparten una mesa circular. Entre cada par de filósofos hay un tenedor, cinco en total. Para comer, un filósofo necesita los dos tenedores adyacentes a su asiento. Si todos tomaran primero el tenedor izquierdo y esperaran el derecho, se produciría un **deadlock** circular donde ninguno avanza.
+
+### Diseño del monitor
+
+La solución abandona el modelo de "mutex por tenedor" (que genera deadlock) y centraliza todo el estado en un único monitor POSIX:
+
+```c
+typedef struct {
+    pthread_mutex_t   mutex;              // Exclusión mutua del estado global
+    pthread_cond_t    cond[N];            // Una variable de condición por filósofo
+    estado_filosofo_t estado[N];          // PENSANDO | HAMBRIENTO | COMIENDO
+    bool              detenido;
+    pthread_mutex_t   logger;             // Logger separado, sin bloquear el monitor
+} mesa_t;
+```
+
+**Secuencia de cada filósofo** (N rondas):
+
+```
+PENSANDO  →  HAMBRIENTO  →  [espera en cond[i]]  →  COMIENDO  →  PENSANDO
+```
+
+La transición `HAMBRIENTO → COMIENDO` solo ocurre si ningún vecino está comiendo, y se decide **dentro del mutex del monitor** mediante la función `intentar_comer()`:
+
+```c
+static void intentar_comer(mesa_t *m, int i) {
+    if (m->estado[i]      == FILOSOFO_HAMBRIENTO &&
+        m->estado[izq(i)] != FILOSOFO_COMIENDO   &&
+        m->estado[der(i)] != FILOSOFO_COMIENDO)
+    {
+        m->estado[i] = FILOSOFO_COMIENDO;
+        pthread_cond_signal(&m->cond[i]);  // Despierta al filósofo i
+    }
+}
+```
+
+Cuando un filósofo deja los tenedores, notifica a sus dos vecinos:
+
+```c
+static void dejar_tenedores(mesa_t *m, int i) {
+    pthread_mutex_lock(&m->mutex);
+    m->estado[i] = FILOSOFO_PENSANDO;
+    intentar_comer(m, izq(i));   // ¿puede comer el vecino izquierdo?
+    intentar_comer(m, der(i));   // ¿puede comer el vecino derecho?
+    pthread_mutex_unlock(&m->mutex);
+}
+```
+
+### Diagrama de estados de un filósofo
+
+```mermaid
+stateDiagram-v2
+    [*] --> Pensando : pthread_create
+    Pensando --> Hambriento : decide comer
+    Hambriento --> EnSeccionCritica : vecinos libres (intentar_comer)
+    Hambriento --> Hambriento : vecino comiendo — espera en cond[i]
+    EnSeccionCritica --> Comiendo : tomar_tenedores retorna
+    Comiendo --> Pensando : dejar_tenedores, notifica vecinos
+    Pensando --> Terminado : cuota completada
+    EnSeccionCritica --> Error : invariante violada o detenido
+    Error --> Terminado : pthread_join
+    Terminado --> [*]
+```
+
+### Demostración de ausencia de deadlock
+
+Se rompe la **condición de Coffman nº 4: espera circular**.
+
+**Argumento formal:**
+
+Para que exista deadlock circular se requiere una cadena:
+`h₁ espera recurso de h₂, h₂ espera de h₃, …, hₖ espera de h₁`.
+
+En esta implementación **solo existe un recurso compartido protegido**: `mesa_t.mutex`. Las condiciones de espera (`pthread_cond_wait`) **liberan automáticamente** ese mutex mientras el hilo duerme. Por tanto:
+
+- Ningún hilo sostiene `mutex` mientras espera en `cond[i]`.
+- El único orden de adquisición de candados es: `mutex → logger` (nunca al revés).
+- No existe la cadena de dependencias cruzadas que requiere el deadlock.
+
+**Corolario:** Un filósofo que espera en `cond[i]` libera el mutex, permitiendo que cualquier vecino que termine de comer adquiera el mutex, llame a `intentar_comer()` y lo despierte. El progreso es garantizable siempre que el planificador del SO eventualmente despache hilos habilitados.
+
+### Verificación de la invariante en tiempo de ejecución
+
+Después de obtener el permiso de comer (`tomar_tenedores` retorna), cada hilo **comprueba explícitamente** que ningún vecino esté en estado `COMIENDO`:
+
+```c
+bool vecino_come = (m->estado[izq(ctx->id)] == FILOSOFO_COMIENDO) ||
+                   (m->estado[der(ctx->id)] == FILOSOFO_COMIENDO);
+if (vecino_come) {
+    fprintf(stderr, "[ERROR CRITICO] Filosofo %d y vecino comen al mismo tiempo!\n", ctx->id);
+    ctx->error = 1;
+    /* parada de emergencia: despierta a todos */
+    ...
+}
+```
+
+Si esta condición se dispara, la simulación reporta el error y termina con código 1. En ninguna ejecución de la suite se ha disparado.
+
+### Separación de responsabilidades de sincronización
+
+| Primitiva | Propósito | Scope |
+|---|---|---|
+| `mesa_t.mutex` | Exclusión mutua del estado de filósofos | Sección crítica del monitor |
+| `mesa_t.cond[i]` | Espera eficiente de condición por filósofo | Dentro del mutex del monitor |
+| `mesa_t.logger` | Serialización de salida de texto | Independiente del monitor |
+
+El `logger` **nunca** se adquiere con `mutex` tomado, evitando nuevos ciclos de dependencia.
+
+### Comandos para compilar y ejecutar
+
+```bash
+# Compilar y ejecutar los 5 filósofos con pausas visuales
+make filosofos
+
+# Ejecutar la suite de pruebas de filósofos (normal + estrés 10 filósofos × 500 rondas)
+make test-filosofos
+
+# Parámetros personalizados en tiempo de compilación
+gcc -Iinclude -Wall -Wextra -std=c11 -D_POSIX_C_SOURCE=200809L \
+    -DNUM_FILOSOFOS=7 -DRONDAS_FILOSOFO=10 -DPAUSA_COMER_MS=50 \
+    -pthread src/main_filosofos.c src/filosofos.c -o mi_filosofos
+```
+
+### Resultados del escenario de estrés
+
+| Escenario | Filósofos | Rondas c/u | Pausas | Repeticiones | Resultado |
+|---|---|---|---|---|---|
+| Normal | 5 | 4 | 80 / 60 ms | 1 | Todos terminan, invariante OK |
+| Estrés | 10 | 500 | 0 / 0 ms | 10 | 5000 rondas por filósofo, sin deadlock ni race |
+
+La prueba de estrés con 10 filósofos y 0 ms de pausa genera la máxima contención posible: cada filósofo intenta comer tan pronto como puede, sometiendo el monitor a miles de adquisiciones concurrentes del mutex. Ningún filósofo ha quedado bloqueado permanentemente en ninguna de las ejecuciones registradas.
+

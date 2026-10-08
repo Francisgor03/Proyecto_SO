@@ -15,10 +15,14 @@ CONCURRENT_SOURCES := src/main_concurrente.c src/hilos.c src/sincronizacion.c sr
 STRESS_TARGET := fase2_concurrente_stress
 EXTRA_TARGETS := fase3_productor_lento fase3_consumidor_lento fase3_fallos
 CONCURRENT_HEADERS := include/concurrencia.h include/sincronizacion.h include/monitor.h
+FILOSOFOS_TARGET := fase2_filosofos
+FILOSOFOS_SOURCES := src/main_filosofos.c src/filosofos.c
+FILOSOFOS_STRESS_TARGET := fase2_filosofos_stress
+FILOSOFOS_HEADERS := include/filosofos.h
 
-.PHONY: all run concurrent test test-shell test-concurrent test-stress test-fallos clean
+.PHONY: all run concurrent filosofos test test-shell test-concurrent test-stress test-fallos test-filosofos clean
 
-all: $(TARGET) $(CONCURRENT_TARGET)
+all: $(TARGET) $(CONCURRENT_TARGET) $(FILOSOFOS_TARGET)
 
 $(TARGET): $(OBJECTS)
 	@printf "[COMPILAR] %s\n" "$@"
@@ -48,13 +52,24 @@ fase3_fallos: $(CONCURRENT_SOURCES) $(CONCURRENT_HEADERS) tests/fallos_concurren
 	@printf "[COMPILAR] %s\n" "$@"
 	$(CC) $(CPPFLAGS) $(CFLAGS) -pthread -DPAUSA_PRODUCTOR_MS=0 -DPAUSA_CONSUMIDOR_MS=0 $(CONCURRENT_SOURCES) tests/fallos_concurrente.c -Wl,--wrap=pthread_create -Wl,--wrap=sem_wait -o $@
 
+$(FILOSOFOS_TARGET): $(FILOSOFOS_SOURCES) $(FILOSOFOS_HEADERS)
+	@printf "[COMPILAR] %s\n" "$@"
+	$(CC) $(CPPFLAGS) $(CFLAGS) -pthread $(FILOSOFOS_SOURCES) -o $@
+
+$(FILOSOFOS_STRESS_TARGET): $(FILOSOFOS_SOURCES) $(FILOSOFOS_HEADERS)
+	@printf "[COMPILAR] %s\n" "$@"
+	$(CC) $(CPPFLAGS) $(CFLAGS) -pthread -DNUM_FILOSOFOS=10 -DRONDAS_FILOSOFO=500 -DPAUSA_COMER_MS=0 -DPAUSA_PENSAR_MS=0 $(FILOSOFOS_SOURCES) -o $@
+
 concurrent: $(CONCURRENT_TARGET)
 	./$(CONCURRENT_TARGET)
+
+filosofos: $(FILOSOFOS_TARGET)
+	./$(FILOSOFOS_TARGET)
 
 run: $(TARGET)
 	./$(TARGET)
 
-test: test-shell test-concurrent test-stress test-fallos
+test: test-shell test-concurrent test-stress test-fallos test-filosofos
 	@printf "\n[OK] Suite completa: todas las pruebas superadas.\n"
 
 test-shell: $(TARGET)
@@ -76,5 +91,12 @@ test-fallos: fase3_fallos
 	@printf "\n=== RECUPERACION ANTE ERRORES ===\n"
 	bash tests/test_fallos_concurrente.sh ./fase3_fallos
 
+test-filosofos: $(FILOSOFOS_STRESS_TARGET)
+	@printf "\n=== FILOSOFOS COMENSALES: PRUEBA NORMAL ===\n"
+	RUNS=1 bash tests/test_filosofos.sh ./$(FILOSOFOS_TARGET) "FILOSOFOS NORMAL"
+	@printf "\n=== FILOSOFOS COMENSALES: ESTRES (10 filosofos, 500 rondas) ===\n"
+	bash tests/test_filosofos.sh ./$(FILOSOFOS_STRESS_TARGET) "FILOSOFOS ESTRES"
+
 clean:
-	rm -f $(TARGET) $(CONCURRENT_TARGET) $(STRESS_TARGET) $(EXTRA_TARGETS) $(OBJECTS)
+	rm -f $(TARGET) $(CONCURRENT_TARGET) $(STRESS_TARGET) $(EXTRA_TARGETS) \
+	       $(FILOSOFOS_TARGET) $(FILOSOFOS_STRESS_TARGET) $(OBJECTS)
