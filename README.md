@@ -1,5 +1,32 @@
 # Mini Shell POSIX
 
+## Entrega 3: memoria virtual con LRU (Diogo y Ariana)
+
+```sh
+make memoria
+make test-memoria
+./fase3_memoria -m 2 -s 256 511 256 512
+```
+
+Simula traduccion de direcciones virtuales a fisicas, tablas de paginas por
+proceso, marcos compartidos y reemplazo LRU. Acepta referencias propias y exporta
+una traza CSV. Consulta los casos con resultados esperados y la API de integracion
+en [docs/memoria_virtual.md](docs/memoria_virtual.md).
+
+## Entrega 3: planificador Round Robin (Alyson y Gerald)
+
+```sh
+make planificador
+make test-planificador
+./fase3_planificador -q 4 1:0:4 2:3:1 3:1:1
+```
+
+Admite quantum y procesos configurables, muestra Gantt y calcula espera,
+retorno y respuesta. Consulta ejemplos y resultados esperados en
+[docs/planificador_round_robin.md](docs/planificador_round_robin.md).
+
+## Entregas anteriores
+
 Proyecto de Sistemas Operativos que implementa un intérprete de comandos
 minimalista en C. El programa permite ejecutar comandos del sistema, cambiar
 de directorio, redirigir la entrada y la salida, consultar variables de

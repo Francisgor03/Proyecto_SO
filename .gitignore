@@ -6,3 +6,13 @@ fase2_concurrente_stress
 fase3_productor_lento
 fase3_consumidor_lento
 fase3_fallos
+fase3_memoria
+tests/test_memoria
+fase3_planificador
+tests/test_planificador
+fase2_filosofos_stress
+fase2_filosofos
+fase2_lectores_escritores
+fase2_peluquero
+__pycache__/
+*.pyc

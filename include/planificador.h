@@ -35,11 +35,17 @@ typedef struct {
     int quantum;
     int num_procesos;
     proceso_t *procesos;
+    int despachos;
+    int cambios_contexto;
 } planificador_t;
 
 // Prototipos de funciones
-void inicializar_planificador(planificador_t *plan, int quantum, int num_procesos, proceso_t *procesos);
-void ejecutar_round_robin(planificador_t *plan);
+/* Devuelven 0 al completar, -1 ante parametros invalidos o falta de memoria.
+ * PID positivo y unico, llegada >= 0, rafaga > 0, quantum > 0.
+ * Cada ejecucion reinicia las metricas. No hay costo temporal de conmutacion.
+ * Empates de llegada: orden original del arreglo. El arreglo no se reordena. */
+int inicializar_planificador(planificador_t *plan, int quantum, int num_procesos, proceso_t *procesos);
+int ejecutar_round_robin(planificador_t *plan);
 void imprimir_metricas(planificador_t *plan);
 
 #endif // PLANIFICADOR_H

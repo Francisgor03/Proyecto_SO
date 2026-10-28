@@ -1,111 +1,150 @@
 #include "planificador.h"
 
-void inicializar_planificador(planificador_t *plan, int quantum, int num_procesos, proceso_t *procesos) {
-    plan->quantum = quantum;
-    plan->num_procesos = num_procesos;
-    plan->procesos = procesos;
+#include <limits.h>
+#include <stdint.h>
 
-    for (int i = 0; i < num_procesos; i++) {
-        plan->procesos[i].tiempo_restante = plan->procesos[i].rafaga_cpu;
-        plan->procesos[i].tiempo_inicio = -1;
-        plan->procesos[i].tiempo_fin = 0;
-        plan->procesos[i].tiempo_espera = 0;
-        plan->procesos[i].tiempo_retorno = 0;
-        plan->procesos[i].tiempo_respuesta = 0;
-        plan->procesos[i].estado = ESTADO_NUEVO;
-        plan->procesos[i].inicio_registrado = false;
+typedef struct {
+    int indice;
+    int llegada;
+} llegada_t;
+
+static int validar(int quantum, int n, const proceso_t *procesos) {
+    if (quantum <= 0 || n <= 0 || !procesos ||
+        (size_t)n > SIZE_MAX / sizeof(llegada_t) ||
+        (size_t)n > SIZE_MAX / sizeof(int)) return -1;
+    int suma = 0, ultima_llegada = 0;
+    for (int i = 0; i < n; i++) {
+        if (procesos[i].pid <= 0 || procesos[i].tiempo_llegada < 0 ||
+            procesos[i].rafaga_cpu <= 0 || procesos[i].rafaga_cpu > INT_MAX - suma)
+            return -1;
+        suma += procesos[i].rafaga_cpu;
+        if (procesos[i].tiempo_llegada > ultima_llegada)
+            ultima_llegada = procesos[i].tiempo_llegada;
+        for (int j = 0; j < i; j++)
+            if (procesos[j].pid == procesos[i].pid) return -1;
     }
+    /* Cota conservadora que evita desbordamiento del reloj y las metricas int. */
+    return ultima_llegada > INT_MAX - suma ? -1 : 0;
 }
 
-void ejecutar_round_robin(planificador_t *plan) {
-    int tiempo_actual = 0;
-    int procesos_completados = 0;
-    int n = plan->num_procesos;
-    
-    // Cola FIFO simple para los índices de los procesos
-    int cola[100];
-    int frente = 0, final = 0;
-    bool en_cola[100] = { false };
+int inicializar_planificador(planificador_t *plan, int quantum, int n, proceso_t *procesos) {
+    if (!plan) return -1;
+    *plan = (planificador_t){0};
+    if (validar(quantum, n, procesos)) return -1;
+    plan->quantum = quantum;
+    plan->num_procesos = n;
+    plan->procesos = procesos;
+    for (int i = 0; i < n; i++) {
+        proceso_t *p = &procesos[i];
+        p->tiempo_restante = p->rafaga_cpu;
+        p->tiempo_inicio = -1;
+        p->tiempo_fin = 0;
+        p->tiempo_espera = 0;
+        p->tiempo_retorno = 0;
+        p->tiempo_respuesta = 0;
+        p->estado = ESTADO_NUEVO;
+        p->inicio_registrado = false;
+    }
+    return 0;
+}
 
+static int comparar_llegada(const void *a, const void *b) {
+    const llegada_t *x = a, *y = b;
+    if (x->llegada != y->llegada) return x->llegada < y->llegada ? -1 : 1;
+    return (x->indice > y->indice) - (x->indice < y->indice);
+}
+
+int ejecutar_round_robin(planificador_t *plan) {
+    if (!plan || validar(plan->quantum, plan->num_procesos, plan->procesos)) return -1;
+    size_t n = (size_t)plan->num_procesos;
+    int *cola = malloc(n * sizeof(*cola));
+    llegada_t *llegadas = malloc(n * sizeof(*llegadas));
+    if (!cola || !llegadas) {
+        free(cola);
+        free(llegadas);
+        return -1;
+    }
+    /* Permite repetir una simulacion sin heredar tiempos ni estados anteriores. */
+    if (inicializar_planificador(plan, plan->quantum, plan->num_procesos, plan->procesos)) {
+        free(cola);
+        free(llegadas);
+        return -1;
+    }
+    for (size_t i = 0; i < n; i++)
+        llegadas[i] = (llegada_t){(int)i, plan->procesos[i].tiempo_llegada};
+    qsort(llegadas, n, sizeof(*llegadas), comparar_llegada);
+
+    size_t frente = 0, final = 0, cantidad = 0, siguiente = 0, completados = 0;
+    int tiempo_actual = 0, anterior = -1;
     printf("\n======================================================\n");
     printf("         DIAGRAMA DE GANTT (Round Robin - Quantum: %d)\n", plan->quantum);
     printf("======================================================\n|");
 
-    // Encolar los procesos que llegan en tiempo 0
-    for (int i = 0; i < n; i++) {
-        if (plan->procesos[i].tiempo_llegada <= tiempo_actual && !en_cola[i]) {
-            cola[final++] = i;
-            en_cola[i] = true;
-            plan->procesos[i].estado = ESTADO_LISTO;
+    while (completados < n) {
+        if (!cantidad && siguiente < n && llegadas[siguiente].llegada > tiempo_actual) {
+            int hasta = llegadas[siguiente].llegada;
+            printf(" CPU IDLE [%d - %d] |", tiempo_actual, hasta);
+            tiempo_actual = hasta;
         }
-    }
-
-    while (procesos_completados < n) {
-        if (frente == final) {
-            // CPU ociosa esperando llegada de procesos
-            printf(" [CPU IDLE %d] |", tiempo_actual);
-            tiempo_actual++;
-            for (int i = 0; i < n; i++) {
-                if (plan->procesos[i].tiempo_llegada <= tiempo_actual && 
-                    plan->procesos[i].estado != ESTADO_TERMINADO && !en_cola[i]) {
-                    cola[final++] = i;
-                    en_cola[i] = true;
-                    plan->procesos[i].estado = ESTADO_LISTO;
-                }
-            }
-            continue;
+        while (siguiente < n && llegadas[siguiente].llegada <= tiempo_actual) {
+            int idx = llegadas[siguiente++].indice;
+            cola[final] = idx;
+            final = (final + 1) % n;
+            cantidad++;
+            plan->procesos[idx].estado = ESTADO_LISTO;
         }
-
-        int idx = cola[frente++];
-        en_cola[idx] = false;
+        int idx = cola[frente];
+        frente = (frente + 1) % n;
+        cantidad--;
         proceso_t *p = &plan->procesos[idx];
-
-        // Registrar tiempo de respuesta en el primer despacho
         if (!p->inicio_registrado) {
             p->tiempo_inicio = tiempo_actual;
-            p->tiempo_respuesta = p->tiempo_inicio - p->tiempo_llegada;
+            p->tiempo_respuesta = tiempo_actual - p->tiempo_llegada;
             p->inicio_registrado = true;
         }
-
         p->estado = ESTADO_EJECUTANDO;
-
-        // Determinar tiempo a ejecutar en este turno
-        int rebanada = (p->tiempo_restante > plan->quantum) ? plan->quantum : p->tiempo_restante;
-        
+        plan->despachos++;
+        if (anterior != -1 && anterior != idx) plan->cambios_contexto++;
+        anterior = idx;
+        int rebanada = p->tiempo_restante > plan->quantum ? plan->quantum : p->tiempo_restante;
         printf("  P%d [%d - %d]  |", p->pid, tiempo_actual, tiempo_actual + rebanada);
         tiempo_actual += rebanada;
         p->tiempo_restante -= rebanada;
 
-        // Encolar nuevos procesos que hayan llegado durante este intervalo
-        for (int i = 0; i < n; i++) {
-            if (plan->procesos[i].tiempo_llegada <= tiempo_actual &&
-                plan->procesos[i].estado != ESTADO_TERMINADO &&
-                !en_cola[i] && i != idx) {
-                cola[final++] = i;
-                en_cola[i] = true;
-                plan->procesos[i].estado = ESTADO_LISTO;
-            }
+        /* Llegadas durante el turno, incluida su frontera final, antes de reencolar
+         * al proceso interrumpido. Se respeta orden cronologico, no orden del PCB. */
+        while (siguiente < n && llegadas[siguiente].llegada <= tiempo_actual) {
+            int nuevo = llegadas[siguiente++].indice;
+            cola[final] = nuevo;
+            final = (final + 1) % n;
+            cantidad++;
+            plan->procesos[nuevo].estado = ESTADO_LISTO;
         }
-
-        // Conmutación de contexto o finalización
-        if (p->tiempo_restante == 0) {
+        if (!p->tiempo_restante) {
             p->estado = ESTADO_TERMINADO;
             p->tiempo_fin = tiempo_actual;
-            p->tiempo_retorno = p->tiempo_fin - p->tiempo_llegada;
+            p->tiempo_retorno = tiempo_actual - p->tiempo_llegada;
             p->tiempo_espera = p->tiempo_retorno - p->rafaga_cpu;
-            procesos_completados++;
+            completados++;
         } else {
             p->estado = ESTADO_LISTO;
-            cola[final++] = idx; // Vuelve al final de la cola
-            en_cola[idx] = true;
+            cola[final] = idx;
+            final = (final + 1) % n;
+            cantidad++;
         }
     }
-    printf("\n======================================================\n\n");
+    printf("\n======================================================\n");
+    printf("Despachos: %d | Cambios de contexto entre procesos: %d\n\n",
+           plan->despachos, plan->cambios_contexto);
+    free(llegadas);
+    free(cola);
+    return 0;
 }
 
 void imprimir_metricas(planificador_t *plan) {
+    if (!plan || !plan->procesos || plan->num_procesos <= 0) return;
     int n = plan->num_procesos;
-    float suma_retorno = 0, suma_espera = 0, suma_respuesta = 0;
+    double suma_retorno = 0, suma_espera = 0, suma_respuesta = 0;
 
     printf("+-----+------------+------------+--------+---------+--------+-----------+\n");
     printf("| PID | T. Llegada | Ráfaga CPU | T. Fin | Retorno | Espera | Respuesta |\n");

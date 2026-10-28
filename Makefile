@@ -25,10 +25,44 @@ RW_HEADERS := include/lectores_escritores.h
 PELUQUERO_TARGET := fase2_peluquero
 PELUQUERO_SOURCES := src/main_peluquero.c src/peluquero.c
 PELUQUERO_HEADERS := include/peluquero.h
+MEMORIA_TARGET := fase3_memoria
+MEMORIA_SOURCES := src/main_memoria.c src/memoria.c
+MEMORIA_TEST := tests/test_memoria
+PLANIFICADOR_TARGET := fase3_planificador
+PLANIFICADOR_SOURCES := src/main_planificador.c src/planificador.c
+PLANIFICADOR_TEST := tests/test_planificador
 
-.PHONY: all run concurrent filosofos lectores-escritores peluquero test test-shell test-concurrent test-stress test-fallos test-filosofos test-lectores-escritores test-peluquero clean
+.PHONY: all run concurrent filosofos lectores-escritores peluquero memoria planificador test test-shell test-concurrent test-stress test-fallos test-filosofos test-lectores-escritores test-peluquero test-memoria test-planificador clean
 
-all: $(TARGET) $(CONCURRENT_TARGET) $(FILOSOFOS_TARGET) $(RW_TARGET) $(PELUQUERO_TARGET)
+all: $(TARGET) $(CONCURRENT_TARGET) $(FILOSOFOS_TARGET) $(RW_TARGET) $(PELUQUERO_TARGET) $(MEMORIA_TARGET) $(PLANIFICADOR_TARGET)
+
+$(PLANIFICADOR_TARGET): $(PLANIFICADOR_SOURCES) include/planificador.h
+	@printf "[COMPILAR] %s\n" "$@"
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(PLANIFICADOR_SOURCES) -o $@
+
+$(PLANIFICADOR_TEST): tests/test_planificador.c src/planificador.c include/planificador.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_planificador.c src/planificador.c -o $@
+
+planificador: $(PLANIFICADOR_TARGET)
+	./$(PLANIFICADOR_TARGET)
+
+test-planificador: $(PLANIFICADOR_TARGET) $(PLANIFICADOR_TEST)
+	./$(PLANIFICADOR_TEST)
+	python3 tests/validar_planificador.py ./$(PLANIFICADOR_TARGET)
+
+$(MEMORIA_TARGET): $(MEMORIA_SOURCES) include/memoria.h
+	@printf "[COMPILAR] %s\n" "$@"
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(MEMORIA_SOURCES) -o $@
+
+$(MEMORIA_TEST): tests/test_memoria.c src/memoria.c include/memoria.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_memoria.c src/memoria.c -o $@
+
+memoria: $(MEMORIA_TARGET)
+	./$(MEMORIA_TARGET)
+
+test-memoria: $(MEMORIA_TARGET) $(MEMORIA_TEST)
+	./$(MEMORIA_TEST)
+	python3 tests/validar_memoria.py ./$(MEMORIA_TARGET)
 
 $(TARGET): $(OBJECTS)
 	@printf "[COMPILAR] %s\n" "$@"
@@ -89,7 +123,7 @@ peluquero: $(PELUQUERO_TARGET)
 run: $(TARGET)
 	./$(TARGET)
 
-test: test-shell test-concurrent test-stress test-fallos test-filosofos test-lectores-escritores test-peluquero
+test: test-shell test-concurrent test-stress test-fallos test-filosofos test-lectores-escritores test-peluquero test-memoria test-planificador
 	@printf "\n[OK] Suite completa: todas las pruebas superadas.\n"
 
 test-shell: $(TARGET)
@@ -111,7 +145,7 @@ test-fallos: fase3_fallos
 	@printf "\n=== RECUPERACION ANTE ERRORES ===\n"
 	bash tests/test_fallos_concurrente.sh ./fase3_fallos
 
-test-filosofos: $(FILOSOFOS_STRESS_TARGET)
+test-filosofos: $(FILOSOFOS_TARGET) $(FILOSOFOS_STRESS_TARGET)
 	@printf "\n=== FILOSOFOS COMENSALES: PRUEBA NORMAL ===\n"
 	RUNS=1 bash tests/test_filosofos.sh ./$(FILOSOFOS_TARGET) "FILOSOFOS NORMAL"
 	@printf "\n=== FILOSOFOS COMENSALES: ESTRES (5 filosofos, 500 rondas) ===\n"
@@ -126,4 +160,5 @@ test-peluquero: $(PELUQUERO_TARGET)
 clean:
 	rm -f $(TARGET) $(CONCURRENT_TARGET) $(STRESS_TARGET) $(EXTRA_TARGETS) \
 	       $(FILOSOFOS_TARGET) $(FILOSOFOS_STRESS_TARGET) $(RW_TARGET) \
-	       $(PELUQUERO_TARGET) $(OBJECTS)
+	       $(PELUQUERO_TARGET) $(MEMORIA_TARGET) $(MEMORIA_TEST) \
+	       $(PLANIFICADOR_TARGET) $(PLANIFICADOR_TEST) $(OBJECTS)
