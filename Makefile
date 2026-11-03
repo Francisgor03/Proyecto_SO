@@ -31,8 +31,9 @@ MEMORIA_TEST := tests/test_memoria
 PLANIFICADOR_TARGET := fase3_planificador
 PLANIFICADOR_SOURCES := src/main_planificador.c src/planificador.c
 PLANIFICADOR_TEST := tests/test_planificador
+ANALISIS_SCRIPT := analisis/generar_analisis.py
 
-.PHONY: all run concurrent filosofos lectores-escritores peluquero memoria planificador test test-shell test-concurrent test-stress test-fallos test-filosofos test-lectores-escritores test-peluquero test-memoria test-planificador clean
+.PHONY: all run concurrent filosofos lectores-escritores peluquero memoria planificador analisis test test-shell test-concurrent test-stress test-fallos test-filosofos test-lectores-escritores test-peluquero test-memoria test-planificador clean
 
 all: $(TARGET) $(CONCURRENT_TARGET) $(FILOSOFOS_TARGET) $(RW_TARGET) $(PELUQUERO_TARGET) $(MEMORIA_TARGET) $(PLANIFICADOR_TARGET)
 
@@ -49,6 +50,10 @@ planificador: $(PLANIFICADOR_TARGET)
 test-planificador: $(PLANIFICADOR_TARGET) $(PLANIFICADOR_TEST)
 	./$(PLANIFICADOR_TEST)
 	python3 tests/validar_planificador.py ./$(PLANIFICADOR_TARGET)
+
+analisis: $(MEMORIA_TARGET) $(PLANIFICADOR_TARGET)
+	@printf "\n=== GRUPO 3: METRICAS, ANALISIS Y GRAFICOS ===\n"
+	python3 $(ANALISIS_SCRIPT) ./$(MEMORIA_TARGET) ./$(PLANIFICADOR_TARGET)
 
 $(MEMORIA_TARGET): $(MEMORIA_SOURCES) include/memoria.h
 	@printf "[COMPILAR] %s\n" "$@"

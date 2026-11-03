@@ -1,0 +1,7 @@
+referencias,fallos_localidad,tasa_localidad_pct,fallos_aleatorio,tasa_aleatorio_pct
+25,5,20.0,15,60.0
+50,14,28.0,32,64.0
+100,34,34.0,72,72.0
+200,65,32.5,149,74.5
+400,96,24.0,296,74.0
+800,207,25.88,582,72.75

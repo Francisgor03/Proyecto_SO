@@ -1,0 +1,152 @@
+Evidencia de pruebas — Grupo 3: Métricas, Análisis e Informe Técnico
+=====================================================================
+Karina y Curto
+Última actualización: noviembre 2026
+
+Archivos del Grupo 3:
+  analisis/generar_analisis.py     — Script principal de experimentación
+  docs/informe_tecnico.md          — Informe técnico completo (10 secciones)
+  docs/graficos/                   — Gráficos PNG y tablas CSV generados
+  docs/evidencia_grupo3.txt        — Este archivo
+
+Dependencias:
+  - Módulo de memoria virtual (Grupo 1): include/memoria.h, src/memoria.c, src/main_memoria.c
+  - Módulo planificador (Grupo 2): include/planificador.h, src/planificador.c, src/main_planificador.c
+  - matplotlib (pip install matplotlib) — opcional para gráficos
+
+──────────────────────────────────────────────────────────────
+1. Verificación del script de análisis
+──────────────────────────────────────────────────────────────
+
+Comando: python3 analisis/generar_analisis.py
+
+El script opera en dos modos:
+  a) Modo real: ejecuta fase3_memoria y fase3_planificador (requiere make all).
+  b) Modo demo: si no encuentra los binarios, usa simulaciones LRU y Round Robin
+     internas en Python puro, generando los mismos gráficos y tablas.
+
+Ambos modos producen:
+  - 6 gráficos PNG en docs/graficos/
+  - 6 archivos CSV con datos tabulares en docs/graficos/
+  - 1 CSV resumen consolidado (resumen_experimentos.csv)
+  - Tablas formateadas en la salida estándar
+
+──────────────────────────────────────────────────────────────
+2. Experimentos ejecutados
+──────────────────────────────────────────────────────────────
+
+EXP 1 — Fallos de página vs marcos disponibles (LRU clásico)
+  Secuencia: 7, 0, 1, 2, 0, 3, 0, 4, 2, 3, 0, 3, 2
+  Marcos: 1 a 8
+  Resultado esperado con 3 marcos: 9 fallos (69.23%)
+  Resultado esperado con 4 marcos: 6 fallos (46.15%)
+  Verificado: curva monótonamente decreciente.
+
+EXP 2 — Impacto de patrones de acceso
+  200 referencias, 16 páginas, marcos de 1 a 16
+  Patrones: secuencial, localidad (80/20), aleatorio, thrashing
+  Verificado: localidad reduce fallos drásticamente vs aleatorio.
+
+EXP 3 — Detección de thrashing
+  8 marcos totales, 16 páginas/proceso, 50 refs/proceso
+  1 a 12 procesos
+  Criterio: tasa de fallos > 50%
+  Verificado: punto de thrashing identificable.
+
+EXP 4 — Fallos vs intensidad de carga de trabajo
+  4 marcos, 16 páginas, cargas de 25 a 800 referencias
+  Localidad vs aleatorio
+  Verificado: tasa converge; localidad amortigua crecimiento.
+
+EXP 5 — Impacto del quantum en Round Robin
+  Procesos: P1(0,8), P2(1,4), P3(2,9), P4(3,5)
+  Quantum de 1 a 13
+  Verificado con quantum 3: retorno 20.00, espera 13.50, respuesta 3.00.
+
+EXP 6 — Comparativa de tipos de carga
+  CPU-bound, IO-bound, Mixta, Escalonada
+  Quantum fijo: 3 ms
+  Verificado: IO-bound tiene tiempos más bajos; escalonada reduce competencia.
+
+──────────────────────────────────────────────────────────────
+3. Archivos generados (docs/graficos/)
+──────────────────────────────────────────────────────────────
+
+Gráficos:
+  exp1_fallos_vs_marcos.png
+  exp2_patrones_acceso.png
+  exp3_thrashing.png
+  exp4_carga_trabajo.png
+  exp5_quantum.png
+  exp6_cargas_planificador.png
+
+Tablas CSV:
+  exp1_fallos_vs_marcos.csv
+  exp2_patrones_acceso.csv
+  exp3_thrashing.csv
+  exp4_carga_trabajo.csv
+  exp5_quantum.csv
+  exp6_cargas_planificador.csv
+  resumen_experimentos.csv
+
+──────────────────────────────────────────────────────────────
+4. Informe técnico (docs/informe_tecnico.md)
+──────────────────────────────────────────────────────────────
+
+Secciones completadas:
+  1. Introducción
+  2. Marco teórico (memoria virtual, LRU, Round Robin)
+  3. Fórmulas y definiciones (métricas de memoria y planificador)
+  4. Descripción de los módulos
+  5. Diseño experimental (6 experimentos)
+  6. Resultados y análisis (con referencias a gráficos)
+  7. Análisis de thrashing (definición formal, criterio, mitigación)
+  8. Conclusiones (5 conclusiones fundamentadas)
+  9. Reproducibilidad
+  10. Referencias bibliográficas
+
+──────────────────────────────────────────────────────────────
+5. Criterio de thrashing
+──────────────────────────────────────────────────────────────
+
+Definición implementada:
+  "Se considera que el sistema entra en thrashing cuando la tasa de fallos
+  de página supera el 50% al incrementar el grado de multiprogramación
+  con un número fijo de marcos."
+
+Justificación:
+  - Umbral 50%: más de la mitad de accesos son fallos → utilidad degradada.
+  - Variable: grado de multiprogramación (Σ WS_i > marcos → thrashing).
+  - Basado en el modelo de working set de Denning (1968).
+
+Zonas definidas:
+  - Normal: tasa < 30%
+  - Advertencia: 30% ≤ tasa ≤ 50%
+  - Thrashing: tasa > 50%
+
+──────────────────────────────────────────────────────────────
+6. Integración con el Makefile
+──────────────────────────────────────────────────────────────
+
+Target 'make analisis':
+  Dependencias: fase3_memoria, fase3_planificador
+  Comando: python3 analisis/generar_analisis.py ./fase3_memoria ./fase3_planificador
+
+Target independiente (sin make):
+  python3 analisis/generar_analisis.py
+  → Usa modo demo si los binarios no están disponibles.
+
+──────────────────────────────────────────────────────────────
+7. Validación cruzada
+──────────────────────────────────────────────────────────────
+
+El modo demo implementa:
+  - _simular_lru(): algoritmo LRU idéntico al de src/memoria.c
+    (pila ordenada por recencia, desalojo del menos reciente).
+  - _simular_round_robin(): simulación milisegundo a milisegundo
+    idéntica a la de tests/validar_planificador.py.
+
+Los resultados del modo demo coinciden con los del modo real para
+todos los casos de prueba conocidos, verificado contra:
+  - tests/validar_memoria.py (secuencia clásica: 9 fallos con 3 marcos)
+  - tests/validar_planificador.py (ejemplo original: retorno 20.00 ms)

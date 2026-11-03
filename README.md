@@ -25,6 +25,32 @@ Admite quantum y procesos configurables, muestra Gantt y calcula espera,
 retorno y respuesta. Consulta ejemplos y resultados esperados en
 [docs/planificador_round_robin.md](docs/planificador_round_robin.md).
 
+## Entrega 3: métricas, análisis e informe técnico (Karina y Curto)
+
+```sh
+make analisis                     # Ejecuta todos los experimentos con binarios reales
+python3 analisis/generar_analisis.py   # Modo demo si no hay binarios compilados
+```
+
+Genera 6 experimentos comparativos entre los módulos de memoria virtual y
+planificador, produce gráficos PNG y tablas CSV, y detecta situaciones de
+thrashing.  El informe técnico completo está en
+[docs/informe_tecnico.md](docs/informe_tecnico.md).
+
+**Experimentos:**
+
+| # | Experimento | Variable | Salida |
+|---|---|---|---|
+| 1 | Fallos vs marcos | Marcos 1–8 | `exp1_fallos_vs_marcos.{png,csv}` |
+| 2 | Patrones de acceso | Secuencial/Localidad/Aleatorio/Thrashing | `exp2_patrones_acceso.{png,csv}` |
+| 3 | Detección de thrashing | 1–12 procesos, 8 marcos fijos | `exp3_thrashing.{png,csv}` |
+| 4 | Carga de trabajo | 25–800 referencias | `exp4_carga_trabajo.{png,csv}` |
+| 5 | Quantum Round Robin | Quantum 1–13 | `exp5_quantum.{png,csv}` |
+| 6 | Tipos de carga CPU | CPU/IO/Mixta/Escalonada | `exp6_cargas_planificador.{png,csv}` |
+
+Requisito: `pip install matplotlib` para gráficos.  Sin matplotlib se generan
+tablas de texto y CSV.
+
 ## Entregas anteriores
 
 Proyecto de Sistemas Operativos que implementa un intérprete de comandos

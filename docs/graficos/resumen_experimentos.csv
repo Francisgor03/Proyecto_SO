@@ -1,0 +1,7 @@
+experimento,titulo,configuracion,conclusion_clave
+Exp1,Fallos vs marcos,LRU,Curva monótonamente decreciente; sin anomalía de Bélády
+Exp2,Patrones de acceso,Localidad 80/20,La localidad es el factor dominante del rendimiento
+Exp3,Detección de thrashing,Umbral 50%,Thrashing identificable al incrementar multiprogramación
+Exp4,Carga de trabajo,Localidad vs aleatorio,La tasa converge; diferencia se amplifica con más marcos
+Exp5,Quantum Round Robin,Q=1..13,Tradeoff entre respuesta (Q bajo) y overhead (Q alto)
+Exp6,Tipos de carga,CPU/IO/Mixta/Escalonada,IO-bound se beneficia más de RR; escalonada reduce competencia

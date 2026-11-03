@@ -14,5 +14,6 @@ fase2_filosofos_stress
 fase2_filosofos
 fase2_lectores_escritores
 fase2_peluquero
+fase3_tareas
 __pycache__/
 *.pyc
