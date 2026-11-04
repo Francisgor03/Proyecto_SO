@@ -1,6 +1,6 @@
 # Mini Shell POSIX
 
-## Entrega 3: memoria virtual con LRU (Diogo y Ariana)
+## Entrega 3: memoria virtual con LRU
 
 ```sh
 make memoria
@@ -13,7 +13,7 @@ proceso, marcos compartidos y reemplazo LRU. Acepta referencias propias y export
 una traza CSV. Consulta los casos con resultados esperados y la API de integracion
 en [docs/memoria_virtual.md](docs/memoria_virtual.md).
 
-## Entrega 3: planificador Round Robin (Alyson y Gerald)
+## Entrega 3: planificador Round Robin
 
 ```sh
 make planificador
@@ -25,11 +25,10 @@ Admite quantum y procesos configurables, muestra Gantt y calcula espera,
 retorno y respuesta. Consulta ejemplos y resultados esperados en
 [docs/planificador_round_robin.md](docs/planificador_round_robin.md).
 
-## Entrega 3: métricas, análisis e informe técnico (Karina y Curto)
+## Entrega 3: métricas, análisis e informe técnico
 
 ```sh
-make analisis                     # Ejecuta todos los experimentos con binarios reales
-python3 analisis/generar_analisis.py   # Modo demo si no hay binarios compilados
+make analisis
 ```
 
 Genera 6 experimentos comparativos entre los módulos de memoria virtual y
@@ -58,14 +57,14 @@ los ejecutables independientes no lo configuran y conservan su comportamiento.
 
 **Experimentos:**
 
-| # | Experimento | Variable | Salida |
-|---|---|---|---|
-| 1 | Fallos vs marcos | Marcos 1–8 | `exp1_fallos_vs_marcos.{png,csv}` |
-| 2 | Patrones de acceso | Secuencial/Localidad/Aleatorio/Thrashing | `exp2_patrones_acceso.{png,csv}` |
-| 3 | Detección de thrashing | 1–12 procesos, 8 marcos fijos | `exp3_thrashing.{png,csv}` |
-| 4 | Carga de trabajo | 25–800 referencias | `exp4_carga_trabajo.{png,csv}` |
-| 5 | Quantum Round Robin | Quantum 1–13 | `exp5_quantum.{png,csv}` |
-| 6 | Tipos de carga CPU | CPU/IO/Mixta/Escalonada | `exp6_cargas_planificador.{png,csv}` |
+| # | Experimento             | Variable                                 | Salida                                 |
+| - | ----------------------- | ---------------------------------------- | -------------------------------------- |
+| 1 | Fallos vs marcos        | Marcos 1–8                              | `exp1_fallos_vs_marcos.{png,csv}`    |
+| 2 | Patrones de acceso      | Secuencial/Localidad/Aleatorio/Thrashing | `exp2_patrones_acceso.{png,csv}`     |
+| 3 | Detección de thrashing | 1–12 procesos, 8 marcos fijos           | `exp3_thrashing.{png,csv}`           |
+| 4 | Carga de trabajo        | 25–800 referencias                      | `exp4_carga_trabajo.{png,csv}`       |
+| 5 | Quantum Round Robin     | Quantum 1–13                            | `exp5_quantum.{png,csv}`             |
+| 6 | Tipos de carga CPU      | CPU/IO/Mixta/Escalonada                  | `exp6_cargas_planificador.{png,csv}` |
 
 Requisito: `pip install matplotlib` para gráficos.  Sin matplotlib se generan
 tablas de texto y CSV.
@@ -212,7 +211,7 @@ La implementación (`archivos.c`, función `configurar_redirecciones`) recorre
 los argumentos, detecta los operadores `<` y `>`, y para cada uno:
 
 - Abre el archivo con `open()` (modo lectura o escritura + creación +
-truncado, con permisos `0644`).
+  truncado, con permisos `0644`).
 - Reemplaza el descriptor estándar correspondiente con `dup2()`.
 - Cierra el descriptor original con `close()`.
 
