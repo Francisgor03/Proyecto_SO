@@ -1,5 +1,5 @@
 tipo_carga,num_procesos,promedio_retorno,promedio_espera,promedio_respuesta,despachos,cambios_contexto
-CPU-bound,3,49.666666666666664,32.0,3.0,18,17
+CPU-bound,3,49.67,32.0,3.0,18,17
 IO-bound,5,4.0,2.2,2.2,5,4
 Mixta,5,23.4,15.4,4.2,14,13
 Escalonada,4,8.25,2.25,0.75,8,5

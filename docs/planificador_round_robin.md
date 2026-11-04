@@ -142,9 +142,21 @@ repetirla no hereda metricas anteriores. El llamador debe comprobar el retorno
 antes de imprimir metricas o usar resultados. No hay recursos persistentes por
 liberar en el planificador: la cola y la lista auxiliar se liberan al finalizar.
 
-La integracion con memoria, experimentos y reporte conjunto siguen siendo la
-siguiente etapa. Los cambios presentes completan y verifican el planificador
-independiente.
+La integracion con memoria virtual esta disponible en `fase3_integrada`.
+El callback opcional `planificador_configurar_acceso_cpu` permite conectar una
+accion de memoria con cada unidad de CPU ejecutada:
+
+```c
+void planificador_configurar_acceso_cpu(planificador_t *plan,
+                                         acceso_cpu_callback_t callback,
+                                         void *datos);
+```
+
+El callback recibe el proceso, el instante actual y un contexto definido por el
+llamador. Si devuelve `-1`, la simulacion se detiene y el error se propaga.
+`fase3_integrada` usa esta interfaz para llamar a `memoria_acceder()` una vez
+por milisegundo de CPU y contabilizar page faults por proceso. Asi, el orden de
+Round Robin determina la secuencia global LRU.
 
 ## Pruebas
 

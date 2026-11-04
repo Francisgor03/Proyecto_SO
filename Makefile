@@ -31,11 +31,13 @@ MEMORIA_TEST := tests/test_memoria
 PLANIFICADOR_TARGET := fase3_planificador
 PLANIFICADOR_SOURCES := src/main_planificador.c src/planificador.c
 PLANIFICADOR_TEST := tests/test_planificador
+INTEGRADA_TARGET := fase3_integrada
+INTEGRADA_SOURCES := src/main_integrada.c src/planificador.c src/memoria.c
 ANALISIS_SCRIPT := analisis/generar_analisis.py
 
-.PHONY: all run concurrent filosofos lectores-escritores peluquero memoria planificador analisis test test-shell test-concurrent test-stress test-fallos test-filosofos test-lectores-escritores test-peluquero test-memoria test-planificador clean
+.PHONY: all run concurrent filosofos lectores-escritores peluquero memoria planificador integrada analisis test test-shell test-concurrent test-stress test-fallos test-filosofos test-lectores-escritores test-peluquero test-memoria test-planificador clean
 
-all: $(TARGET) $(CONCURRENT_TARGET) $(FILOSOFOS_TARGET) $(RW_TARGET) $(PELUQUERO_TARGET) $(MEMORIA_TARGET) $(PLANIFICADOR_TARGET)
+all: $(TARGET) $(CONCURRENT_TARGET) $(FILOSOFOS_TARGET) $(RW_TARGET) $(PELUQUERO_TARGET) $(MEMORIA_TARGET) $(PLANIFICADOR_TARGET) $(INTEGRADA_TARGET)
 
 $(PLANIFICADOR_TARGET): $(PLANIFICADOR_SOURCES) include/planificador.h
 	@printf "[COMPILAR] %s\n" "$@"
@@ -50,6 +52,13 @@ planificador: $(PLANIFICADOR_TARGET)
 test-planificador: $(PLANIFICADOR_TARGET) $(PLANIFICADOR_TEST)
 	./$(PLANIFICADOR_TEST)
 	python3 tests/validar_planificador.py ./$(PLANIFICADOR_TARGET)
+
+$(INTEGRADA_TARGET): $(INTEGRADA_SOURCES) include/planificador.h include/memoria.h
+	@printf "[COMPILAR] %s\n" "$@"
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(INTEGRADA_SOURCES) -o $@
+
+integrada: $(INTEGRADA_TARGET)
+	./$(INTEGRADA_TARGET)
 
 analisis: $(MEMORIA_TARGET) $(PLANIFICADOR_TARGET)
 	@printf "\n=== GRUPO 3: METRICAS, ANALISIS Y GRAFICOS ===\n"
@@ -167,3 +176,4 @@ clean:
 	       $(FILOSOFOS_TARGET) $(FILOSOFOS_STRESS_TARGET) $(RW_TARGET) \
 	       $(PELUQUERO_TARGET) $(MEMORIA_TARGET) $(MEMORIA_TEST) \
 	       $(PLANIFICADOR_TARGET) $(PLANIFICADOR_TEST) $(OBJECTS)
+	rm -f $(INTEGRADA_TARGET)

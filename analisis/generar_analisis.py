@@ -238,9 +238,12 @@ def generar_referencias(patron, num_refs, num_paginas, tam_pagina=256,
     rng = random.Random(seed)
     refs = []
     if patron == "secuencial":
+        # Recorrido secuencial contiguo en memoria con localidad espacial
+        # (ej. recorrido de un vector con 4 accesos por página de 256 bytes)
+        paso = max(1, tam_pagina // 4)
         for i in range(num_refs):
             pid = (i % procesos) + 1
-            refs.append((pid, (i % num_paginas) * tam_pagina))
+            refs.append((pid, (i * paso) % (num_paginas * tam_pagina)))
     elif patron == "aleatorio":
         for _ in range(num_refs):
             pid = rng.randint(1, procesos)

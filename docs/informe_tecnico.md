@@ -267,12 +267,15 @@ mientras mantiene los demás fijos, aislando su efecto sobre las métricas.
 
 - **Localidad (80/20):** Dramáticamente menos fallos que el aleatorio.  Con
   solo 4 marcos cubre la mayor parte del hot set (20% de las páginas).
-- **Secuencial:** Comportamiento predecible pero sin reutilización; los fallos
-  dependen directamente de cuántas páginas distintas se recorren.
+- **Secuencial (localidad espacial):** Comportamiento predecible. Al acceder a
+  direcciones contiguas en memoria (múltiples referencias por página), los
+  accesos subsecuentes dentro de la misma página son aciertos inmediatos; la curva
+  se mantiene en una meseta constante (50 fallos) independientemente de los marcos
+  hasta que caben todas las páginas en memoria física (16 fallos).
 - **Aleatorio:** Alta tasa de fallos hasta que los marcos cubren la mayoría
   de las páginas.
 - **Thrashing (peor caso):** Maximiza los fallos recorriendo todas las páginas
-  cíclicamente.  Solo con marcos ≥ páginas se eliminan los fallos.
+  cíclicamente con un solo acceso por página. Solo con marcos ≥ páginas se eliminan los fallos.
 
 **Conclusión:** El principio de localidad es el factor más determinante del
 rendimiento de la memoria virtual.  Un buen diseño de software que maximice la
@@ -284,10 +287,12 @@ localidad de referencia es más efectivo que agregar marcos.
 
 **Observaciones:**
 
-- Con 1–3 procesos y 8 marcos, la tasa se mantiene baja (marcos suficientes
-  para los working sets).
-- A medida que aumenta el grado de multiprogramación, los marcos por proceso
-  se reducen y la tasa de fallos crece.
+- Con 1 proceso y 8 marcos, la tasa de fallos se mantiene baja (16.0%, operación normal).
+- A partir de 2 procesos, el working set combinado (16 páginas) satura los 8
+  marcos físicos disponibles bajo la política de reemplazo global, disparando
+  la tasa al 53.0% y alcanzando la condición de **thrashing** (supera el umbral del 50%).
+- A medida que aumenta el grado de multiprogramación, los marcos promedio por
+  proceso disminuyen y la tasa de fallos continúa creciendo hasta alcanzar el 100%.
 - El **punto de thrashing** se identifica cuando la tasa supera el umbral
   del 50%.  A partir de ese punto, agregar más procesos empeora drásticamente
   el rendimiento.

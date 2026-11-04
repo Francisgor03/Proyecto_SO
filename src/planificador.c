@@ -56,6 +56,8 @@ static int comparar_llegada(const void *a, const void *b) {
 
 int ejecutar_round_robin(planificador_t *plan) {
     if (!plan || validar(plan->quantum, plan->num_procesos, plan->procesos)) return -1;
+    acceso_cpu_callback_t callback = plan->acceso_cpu;
+    void *datos_callback = plan->datos_acceso_cpu;
     size_t n = (size_t)plan->num_procesos;
     int *cola = malloc(n * sizeof(*cola));
     llegada_t *llegadas = malloc(n * sizeof(*llegadas));
@@ -70,6 +72,8 @@ int ejecutar_round_robin(planificador_t *plan) {
         free(llegadas);
         return -1;
     }
+    plan->acceso_cpu = callback;
+    plan->datos_acceso_cpu = datos_callback;
     for (size_t i = 0; i < n; i++)
         llegadas[i] = (llegada_t){(int)i, plan->procesos[i].tiempo_llegada};
     qsort(llegadas, n, sizeof(*llegadas), comparar_llegada);
@@ -108,7 +112,15 @@ int ejecutar_round_robin(planificador_t *plan) {
         anterior = idx;
         int rebanada = p->tiempo_restante > plan->quantum ? plan->quantum : p->tiempo_restante;
         printf("  P%d [%d - %d]  |", p->pid, tiempo_actual, tiempo_actual + rebanada);
-        tiempo_actual += rebanada;
+        for (int unidad = 0; unidad < rebanada; unidad++) {
+            if (plan->acceso_cpu &&
+                plan->acceso_cpu(p, tiempo_actual, plan->datos_acceso_cpu)) {
+                free(llegadas);
+                free(cola);
+                return -1;
+            }
+            tiempo_actual++;
+        }
         p->tiempo_restante -= rebanada;
 
         /* Llegadas durante el turno, incluida su frontera final, antes de reencolar
@@ -120,6 +132,7 @@ int ejecutar_round_robin(planificador_t *plan) {
             cantidad++;
             plan->procesos[nuevo].estado = ESTADO_LISTO;
         }
+
         if (!p->tiempo_restante) {
             p->estado = ESTADO_TERMINADO;
             p->tiempo_fin = tiempo_actual;
@@ -139,6 +152,14 @@ int ejecutar_round_robin(planificador_t *plan) {
     free(llegadas);
     free(cola);
     return 0;
+}
+
+void planificador_configurar_acceso_cpu(planificador_t *plan,
+                                         acceso_cpu_callback_t callback,
+                                         void *datos) {
+    if (!plan) return;
+    plan->acceso_cpu = callback;
+    plan->datos_acceso_cpu = datos;
 }
 
 void imprimir_metricas(planificador_t *plan) {

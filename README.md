@@ -37,6 +37,25 @@ planificador, produce gráficos PNG y tablas CSV, y detecta situaciones de
 thrashing.  El informe técnico completo está en
 [docs/informe_tecnico.md](docs/informe_tecnico.md).
 
+## Integración CPU + memoria
+
+El ejecutable `fase3_integrada` conecta Round Robin con el simulador LRU.
+Cada unidad de CPU asignada a un proceso consume la siguiente dirección de su
+carga de memoria; por ello, el orden del Gantt determina el orden real de los
+aciertos y fallos:
+
+```sh
+make integrada
+./fase3_integrada -q 2 -m 2 1:0:4:0,256 2:1:3:0,256
+```
+
+El formato es `pid:llegada:rafaga:direccion,direccion,...`. Las referencias se
+repiten cíclicamente si la ráfaga es mayor que la lista. La salida muestra el
+Gantt y las métricas del planificador, mientras que la traza de memoria se
+envía a `stderr` y el resumen final incluye fallos y aciertos por proceso.
+Internamente, el planificador expone un callback opcional por unidad de CPU;
+los ejecutables independientes no lo configuran y conservan su comportamiento.
+
 **Experimentos:**
 
 | # | Experimento | Variable | Salida |
