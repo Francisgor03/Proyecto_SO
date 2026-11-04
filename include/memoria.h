@@ -41,4 +41,7 @@ int memoria_acceder(memoria_t *mem, size_t pid, size_t direccion,
                     acceso_memoria_t *resultado);
 void memoria_destruir(memoria_t *mem);
 
+/* FIFO: usar una instancia nueva, sin mezclar con LRU. */
+int memoria_acceder_fifo(memoria_t *, size_t, size_t, acceso_memoria_t *);
+
 #endif

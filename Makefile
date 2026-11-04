@@ -184,3 +184,21 @@ clean:
 	       $(PELUQUERO_TARGET) $(MEMORIA_TARGET) $(MEMORIA_TEST) \
 	       $(PLANIFICADOR_TARGET) $(PLANIFICADOR_TEST) $(OBJECTS)
 	rm -f $(INTEGRADA_TARGET)
+
+.PHONY: extras-manuales test-extras-manuales
+
+extra_memoria: src/main_extra_memoria.c src/extra_fifo.c src/memoria.c include/memoria.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) src/main_extra_memoria.c src/extra_fifo.c src/memoria.c -o $@
+
+extra_cpu: src/main_extra_cpu.c src/extra_sjf.c src/planificador.c include/planificador.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) src/main_extra_cpu.c src/extra_sjf.c src/planificador.c -o $@
+
+tests/test_extras: tests/test_extras.c src/extra_fifo.c src/extra_sjf.c src/memoria.c src/planificador.c include/memoria.h include/planificador.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_extras.c src/extra_fifo.c src/extra_sjf.c src/memoria.c src/planificador.c -o $@
+
+extras-manuales: extra_memoria extra_cpu
+	./extra_memoria
+	./extra_cpu
+
+test-extras-manuales: extras-manuales tests/test_extras
+	./tests/test_extras

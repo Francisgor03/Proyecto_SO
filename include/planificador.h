@@ -67,4 +67,7 @@ void planificador_configurar_acceso_cpu(planificador_t *plan,
                                          void *datos);
 void imprimir_metricas(planificador_t *plan);
 
+/* SJF no apropiativo; plan inicializado; quantum ignorado. */
+int ejecutar_sjf(planificador_t *);
+
 #endif // PLANIFICADOR_H
