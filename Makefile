@@ -34,8 +34,9 @@ PLANIFICADOR_TEST := tests/test_planificador
 INTEGRADA_TARGET := fase3_integrada
 INTEGRADA_SOURCES := src/main_integrada.c src/planificador.c src/memoria.c
 ANALISIS_SCRIPT := analisis/generar_analisis.py
+PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 
-.PHONY: all run concurrent filosofos lectores-escritores peluquero memoria planificador integrada analisis test test-shell test-concurrent test-stress test-fallos test-filosofos test-lectores-escritores test-peluquero test-memoria test-planificador clean
+.PHONY: all run concurrent filosofos lectores-escritores peluquero memoria planificador integrada analisis test test-shell test-concurrent test-stress test-fallos test-filosofos test-lectores-escritores test-peluquero test-memoria test-planificador test-integrada test-analisis clean
 
 all: $(TARGET) $(CONCURRENT_TARGET) $(FILOSOFOS_TARGET) $(RW_TARGET) $(PELUQUERO_TARGET) $(MEMORIA_TARGET) $(PLANIFICADOR_TARGET) $(INTEGRADA_TARGET)
 
@@ -51,18 +52,24 @@ planificador: $(PLANIFICADOR_TARGET)
 
 test-planificador: $(PLANIFICADOR_TARGET) $(PLANIFICADOR_TEST)
 	./$(PLANIFICADOR_TEST)
-	python3 tests/validar_planificador.py ./$(PLANIFICADOR_TARGET)
+	$(PYTHON) tests/validar_planificador.py ./$(PLANIFICADOR_TARGET)
 
 $(INTEGRADA_TARGET): $(INTEGRADA_SOURCES) include/planificador.h include/memoria.h
 	@printf "[COMPILAR] %s\n" "$@"
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(INTEGRADA_SOURCES) -o $@
 
 integrada: $(INTEGRADA_TARGET)
-	./$(INTEGRADA_TARGET)
+	./$(INTEGRADA_TARGET) -q 1 -m 2 -f 5 1:0:4:0,256 2:0:4:0,256
 
-analisis: $(MEMORIA_TARGET) $(PLANIFICADOR_TARGET)
+test-integrada: $(INTEGRADA_TARGET)
+	$(PYTHON) tests/validar_integrada.py ./$(INTEGRADA_TARGET)
+
+test-analisis: $(MEMORIA_TARGET) $(PLANIFICADOR_TARGET) $(INTEGRADA_TARGET)
+	$(PYTHON) tests/test_analisis.py
+
+analisis: $(MEMORIA_TARGET) $(PLANIFICADOR_TARGET) $(INTEGRADA_TARGET)
 	@printf "\n=== GRUPO 3: METRICAS, ANALISIS Y GRAFICOS ===\n"
-	python3 $(ANALISIS_SCRIPT) ./$(MEMORIA_TARGET) ./$(PLANIFICADOR_TARGET)
+	$(PYTHON) $(ANALISIS_SCRIPT) ./$(MEMORIA_TARGET) ./$(PLANIFICADOR_TARGET) ./$(INTEGRADA_TARGET)
 
 $(MEMORIA_TARGET): $(MEMORIA_SOURCES) include/memoria.h
 	@printf "[COMPILAR] %s\n" "$@"
@@ -76,7 +83,7 @@ memoria: $(MEMORIA_TARGET)
 
 test-memoria: $(MEMORIA_TARGET) $(MEMORIA_TEST)
 	./$(MEMORIA_TEST)
-	python3 tests/validar_memoria.py ./$(MEMORIA_TARGET)
+	$(PYTHON) tests/validar_memoria.py ./$(MEMORIA_TARGET)
 
 $(TARGET): $(OBJECTS)
 	@printf "[COMPILAR] %s\n" "$@"
@@ -137,7 +144,7 @@ peluquero: $(PELUQUERO_TARGET)
 run: $(TARGET)
 	./$(TARGET)
 
-test: test-shell test-concurrent test-stress test-fallos test-filosofos test-lectores-escritores test-peluquero test-memoria test-planificador
+test: test-shell test-concurrent test-stress test-fallos test-filosofos test-lectores-escritores test-peluquero test-memoria test-planificador test-integrada test-analisis
 	@printf "\n[OK] Suite completa: todas las pruebas superadas.\n"
 
 test-shell: $(TARGET)

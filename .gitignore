@@ -17,3 +17,6 @@ fase2_peluquero
 fase3_tareas
 __pycache__/
 *.pyc
+
+fase3_integrada
+.venv/

@@ -7,21 +7,24 @@ planificador de CPU (Grupo 2), genera gráficos comparativos, tablas
 de métricas y detecta situaciones de thrashing.
 
 Uso:
-    python3 analisis/generar_analisis.py [ruta_memoria] [ruta_planificador]
+    python3 analisis/generar_analisis.py [ruta_memoria] [ruta_planificador] [ruta_integrada]
+    python3 analisis/generar_analisis.py --demo --solo-tablas
 
 Modos de operación:
     1. Con binarios compilados (make all): ejecuta los binarios reales.
-    2. Sin binarios (modo demo/standalone): usa simulaciones internas
+    2. Con --demo explicito: usa simulaciones internas
        en Python puro para generar los mismos gráficos y tablas.
 
 Requisitos:
-    - matplotlib  (pip install matplotlib) — opcional, sin él solo tablas.
-    - Para modo real: binarios fase3_memoria y fase3_planificador (make all).
+    - matplotlib; --solo-tablas permite ejecutar sin graficos.
+    - Para modo real: fase3_memoria, fase3_planificador y fase3_integrada (make all).
 """
 
+import argparse
 import csv
-import io
-import os
+import hashlib
+import json
+from datetime import datetime, timezone
 import random
 import re
 import subprocess
@@ -46,10 +49,10 @@ except ImportError:
 # Rutas y configuración global
 # ──────────────────────────────────────────────────────────
 RAIZ = Path(__file__).resolve().parent.parent
-BIN_MEMORIA = sys.argv[1] if len(sys.argv) > 1 else str(RAIZ / "fase3_memoria")
-BIN_PLANIFICADOR = sys.argv[2] if len(sys.argv) > 2 else str(RAIZ / "fase3_planificador")
+BIN_MEMORIA = str(RAIZ / "fase3_memoria")
+BIN_PLANIFICADOR = str(RAIZ / "fase3_planificador")
+BIN_INTEGRADA = str(RAIZ / "fase3_integrada")
 DIR_GRAFICOS = RAIZ / "docs" / "graficos"
-DIR_GRAFICOS.mkdir(parents=True, exist_ok=True)
 DIR_CSV = DIR_GRAFICOS  # Los CSV se guardan junto a los gráficos
 
 # Verificar disponibilidad de binarios
@@ -71,7 +74,9 @@ if HAS_MPL:
 # ──────────────────────────────────────────────────────────
 
 def _simular_lru(marcos, refs, tam=256, paginas=16, procs=1):
-    """Simulación LRU pura en Python — idéntica al binario fase3_memoria."""
+    """Modelo de conteos LRU para el modo demo explicito."""
+    if min(marcos, tam, paginas, procs) <= 0:
+        raise ValueError("Configuracion invalida")
     pila = []        # Menos reciente al frente
     residentes = {}  # (pid, pagina) -> marco
     fallos = 0
@@ -79,8 +84,8 @@ def _simular_lru(marcos, refs, tam=256, paginas=16, procs=1):
 
     for pid, direccion in refs:
         pagina = direccion // tam
-        if pagina >= paginas or pid < 1 or pid > procs:
-            continue
+        if direccion < 0 or pagina >= paginas or pid < 1 or pid > procs:
+            raise ValueError("Referencia fuera de rango")
         total += 1
         clave = (pid, pagina)
 
@@ -222,6 +227,8 @@ def parsear_metricas_planificador(texto):
     despachos = re.search(
         r"Despachos:\s*(\d+).*?Cambios de contexto.*?:\s*(\d+)", texto
     )
+    if not procesos or not promedios or not despachos:
+        raise ValueError("Salida del planificador incompleta o incompatible")
     return {
         "procesos": procesos,
         "promedio_retorno": float(promedios.group(1)) if promedios else 0,
@@ -243,7 +250,7 @@ def generar_referencias(patron, num_refs, num_paginas, tam_pagina=256,
         paso = max(1, tam_pagina // 4)
         for i in range(num_refs):
             pid = (i % procesos) + 1
-            refs.append((pid, (i * paso) % (num_paginas * tam_pagina)))
+            refs.append((pid, ((i // procesos) * paso) % (num_paginas * tam_pagina)))
     elif patron == "aleatorio":
         for _ in range(num_refs):
             pid = rng.randint(1, procesos)
@@ -260,7 +267,7 @@ def generar_referencias(patron, num_refs, num_paginas, tam_pagina=256,
     elif patron == "thrashing":
         for i in range(num_refs):
             pid = (i % procesos) + 1
-            refs.append((pid, (i % num_paginas) * tam_pagina))
+            refs.append((pid, ((i // procesos) % num_paginas) * tam_pagina))
     return refs
 
 
@@ -276,8 +283,11 @@ def ejecutar_memoria(marcos, refs, tam=256, paginas=16, procs=1):
     args += [f"{pid}:{addr}" for pid, addr in refs]
     stdout, stderr, rc = _ejecutar(BIN_MEMORIA, args)
     if rc != 0:
-        return None
-    return parsear_resumen_memoria(stderr)
+        raise RuntimeError(f"Memoria fallo: {stderr.strip()}")
+    resultado = parsear_resumen_memoria(stderr)
+    if resultado is None or resultado["referencias"] != len(refs):
+        raise ValueError("Resumen de memoria incompleto o incompatible")
+    return resultado
 
 
 def ejecutar_planificador(procs, quantum):
@@ -286,8 +296,9 @@ def ejecutar_planificador(procs, quantum):
         return _simular_round_robin(procs, quantum)
 
     args = ["-q", str(quantum)] + [f"{p}:{l}:{r}" for p, l, r in procs]
-    stdout, _, rc = _ejecutar(BIN_PLANIFICADOR, args)
-    assert rc == 0, f"Planificador falló con quantum {quantum}"
+    stdout, stderr, rc = _ejecutar(BIN_PLANIFICADOR, args)
+    if rc != 0:
+        raise RuntimeError(f"Planificador fallo con quantum {quantum}: {stderr.strip()}")
     return parsear_metricas_planificador(stdout)
 
 
@@ -303,7 +314,7 @@ def guardar_csv(nombre, cabeceras, filas):
     """Guarda una tabla de resultados como CSV."""
     ruta = DIR_CSV / nombre
     with open(ruta, "w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
+        writer = csv.writer(f, lineterminator="\n")
         writer.writerow(cabeceras)
         writer.writerows(filas)
     print(f"  → CSV:     {ruta}")
@@ -312,6 +323,17 @@ def guardar_csv(nombre, cabeceras, filas):
 # ──────────────────────────────────────────────────────────
 # EXPERIMENTO 1 — Fallos de página vs marcos disponibles
 # ──────────────────────────────────────────────────────────
+
+def clasificar_fallos(fallos, referencias):
+    """Indicador heuristico del equipo; no es una definicion universal de thrashing."""
+    if not 0 <= fallos <= referencias or referencias <= 0:
+        raise ValueError("Conteos de referencias invalidos")
+    if 2 * fallos > referencias:
+        return "RIESGO ALTO"
+    if 10 * fallos >= 3 * referencias:
+        return "ADVERTENCIA"
+    return "NORMAL"
+
 
 def experimento_1():
     print("\n" + "=" * 64)
@@ -389,7 +411,7 @@ def experimento_2():
         resultados[patron] = []
         for m in marcos_rango:
             r = ejecutar_memoria(m, refs, paginas=NUM_PAG)
-            resultados[patron].append(r["fallos"] if r else 0)
+            resultados[patron].append(r["fallos"])
 
     # Tabla
     print(f"\n{'Marcos':>7}", end="")
@@ -446,7 +468,10 @@ def experimento_3():
     procesos_rango = list(range(1, 13))
     tasas, fallos_lista = [], []
 
-    rng = random.Random(2026)
+    # Cada PID conserva su misma carga al aumentar la multiprogramacion.
+    rngs = {pid: random.Random(2026 + pid) for pid in range(1, 13)}
+    cargas = {pid: [rngs[pid].randrange(8) * TAM for _ in range(REFS_POR_PROC)]
+              for pid in rngs}
 
     print(f"\nMarcos totales: {MARCOS_TOTAL}  |  Págs/proceso: {NUM_PAG}")
     print(f"Refs/proceso: {REFS_POR_PROC}  |  Umbral thrashing: {UMBRAL}%")
@@ -456,14 +481,13 @@ def experimento_3():
     filas_csv = []
     for num_proc in procesos_rango:
         refs = []
-        for _ in range(REFS_POR_PROC):
+        for paso in range(REFS_POR_PROC):
             for pid in range(1, num_proc + 1):
-                pag = rng.randint(0, min(NUM_PAG - 1, 7))
-                refs.append((pid, pag * TAM))
+                refs.append((pid, cargas[pid][paso]))
         r = ejecutar_memoria(MARCOS_TOTAL, refs, TAM, NUM_PAG, num_proc)
         tasas.append(r["tasa_fallos"])
         fallos_lista.append(r["fallos"])
-        estado = "⚠ THRASHING" if r["tasa_fallos"] > UMBRAL else "Normal"
+        estado = clasificar_fallos(r["fallos"], r["referencias"])
         print(f"{num_proc:>10} {r['fallos']:>8} {r['referencias']:>8} "
               f"{r['tasa_fallos']:>7.1f}% {estado}")
         filas_csv.append([num_proc, r["referencias"], r["fallos"],
@@ -471,9 +495,9 @@ def experimento_3():
 
     punto = next((procesos_rango[i] for i, t in enumerate(tasas) if t > UMBRAL), None)
     if punto:
-        print(f"\n  ⚠ Thrashing desde {punto} procesos (tasa > {UMBRAL}%)")
+        print(f"\n  ⚠ Riesgo heuristico desde {punto} procesos (tasa > {UMBRAL}%)")
     else:
-        print(f"\n  ✓ Sin thrashing hasta {procesos_rango[-1]} procesos")
+        print(f"\n  ✓ Sin riesgo heuristico hasta {procesos_rango[-1]} procesos")
 
     guardar_csv("exp3_thrashing.csv",
                 ["procesos", "referencias", "fallos", "tasa_fallos_pct", "estado"],
@@ -481,12 +505,12 @@ def experimento_3():
 
     if HAS_MPL:
         fig, ax = plt.subplots(figsize=(12, 6))
-        colores = ["#e74c3c" if t > UMBRAL else "#f39c12" if t > 30
+        colores = ["#e74c3c" if t > UMBRAL else "#f39c12" if t >= 30
                    else "#27ae60" for t in tasas]
         ax.bar(procesos_rango, tasas, color=colores, edgecolor="black",
                alpha=0.85)
         ax.axhline(y=UMBRAL, color="red", ls="--", lw=2,
-                   label=f"Umbral thrashing ({UMBRAL}%)")
+                   label=f"Umbral heuristico ({UMBRAL}%)")
         ax.set_xlabel("Grado de multiprogramación (procesos)")
         ax.set_ylabel("Tasa de fallos de página (%)")
         ax.set_title(f"Detección de thrashing ({MARCOS_TOTAL} marcos, "
@@ -496,7 +520,7 @@ def experimento_3():
         if punto:
             idx = procesos_rango.index(punto)
             ax.annotate(
-                f"Thrashing\n({punto} procs)",
+                f"Riesgo alto\n({punto} procs)",
                 xy=(punto, tasas[idx]),
                 xytext=(punto + 1.5, max(tasas) * 0.7),
                 arrowprops=dict(arrowstyle="->", color="red", lw=2),
@@ -639,7 +663,7 @@ def experimento_6():
 
     cargas = {
         "CPU-bound": [(1, 0, 20), (2, 0, 18), (3, 0, 15)],
-        "IO-bound": [(1, 0, 2), (2, 1, 3), (3, 2, 1), (4, 3, 2), (5, 4, 1)],
+        "Rafagas cortas": [(1, 0, 2), (2, 1, 3), (3, 2, 1), (4, 3, 2), (5, 4, 1)],
         "Mixta": [(1, 0, 15), (2, 1, 3), (3, 2, 12), (4, 3, 2), (5, 5, 8)],
         "Escalonada": [(1, 0, 6), (2, 5, 6), (3, 10, 6), (4, 15, 6)],
     }
@@ -695,6 +719,72 @@ def experimento_6():
 
 
 # ──────────────────────────────────────────────────────────
+# Experimento integrado
+# ──────────────────────────────────────────────────────────
+
+def ejecutar_integrada(marcos, quantum, costo):
+    args = ["-q", str(quantum), "-m", str(marcos), "-f", str(costo),
+            "1:0:40:0,256", "2:0:40:0,256"]
+    stdout, stderr, rc = _ejecutar(BIN_INTEGRADA, args)
+    if rc:
+        raise RuntimeError(f"Integrada fallo: {stderr.strip()}")
+    memoria = re.search(r"Total: referencias=(\d+) fallos=(\d+) aciertos=(\d+)", stdout)
+    tiempos = re.search(r"Tiempo_total=(\d+) CPU_util=(\d+) Servicio_fallos=(\d+) Ocioso=(\d+)", stdout)
+    if not memoria or not tiempos:
+        raise ValueError("Resumen integrado incompleto")
+    refs, fallos, aciertos = map(int, memoria.groups())
+    total, cpu, servicio, ocioso = map(int, tiempos.groups())
+    if refs != 80 or fallos + aciertos != refs or total != cpu + servicio + ocioso:
+        raise ValueError("Contadores integrados inconsistentes")
+    return {"referencias": refs, "fallos": fallos, "aciertos": aciertos,
+            "tasa": 100 * fallos / refs, "total": total, "cpu": cpu,
+            "servicio": servicio, "utilizacion": 100 * cpu / total,
+            "rendimiento": refs / total, **parsear_metricas_planificador(stdout)}
+
+
+def experimento_7():
+    print("\nEXP 7: CPU + memoria, quantum, marcos y coste de fallos")
+    filas, resultados = [], {}
+    for costo in (0, 5):
+        for q in (1, 2, 4):
+            resultados[costo, q] = []
+            for m in range(1, 9):
+                r = ejecutar_integrada(m, q, costo)
+                resultados[costo, q].append(r)
+                filas.append([m, q, costo, r["referencias"], r["fallos"], r["tasa"],
+                              r["total"], r["servicio"], r["utilizacion"],
+                              r["rendimiento"], r["promedio_retorno"],
+                              r["promedio_espera"], r["promedio_respuesta"],
+                              clasificar_fallos(r["fallos"], r["referencias"])])
+    guardar_csv("exp7_integracion.csv",
+                ["marcos", "quantum", "costo_fallo_ms", "referencias", "fallos",
+                 "tasa_fallos_pct", "tiempo_total_ms", "servicio_fallos_ms",
+                 "utilizacion_cpu_pct", "rendimiento_refs_ms", "promedio_retorno",
+                 "promedio_espera", "promedio_respuesta", "riesgo_heuristico"], filas)
+    for costo in (0, 5):
+        for m in (2, 4):
+            r = resultados[costo, 1][m - 1]
+            print(f"  Q=1 marcos={m} coste={costo}: fallos={r['fallos']}, "
+                  f"total={r['total']} ms, CPU util={r['utilizacion']:.2f}%")
+    if HAS_MPL:
+        fig, ejes = plt.subplots(1, 3, figsize=(16, 5))
+        for q in (1, 2, 4):
+            datos = resultados[5, q]
+            for ax, clave in zip(ejes, ("fallos", "total", "utilizacion")):
+                ax.plot(range(1, 9), [d[clave] for d in datos], "o-", label=f"Q={q}")
+                ax.set_xlabel("Marcos fisicos")
+                ax.set_xticks(range(1, 9))
+                ax.legend()
+        ejes[0].set_ylabel("Fallos de pagina")
+        ejes[1].set_ylabel("Tiempo total (ms)")
+        ejes[2].set_ylabel("CPU productiva (%)")
+        fig.suptitle("Round Robin + LRU: 2 procesos, 80 referencias, servicio sincrono de 5 ms/fallo")
+        fig.tight_layout()
+        guardar(fig, "exp7_integracion.png")
+    return resultados
+
+
+# ──────────────────────────────────────────────────────────
 # Generación de resumen consolidado CSV
 # ──────────────────────────────────────────────────────────
 
@@ -710,14 +800,18 @@ def generar_resumen_consolidado():
         ["Exp2", "Patrones de acceso", "Localidad 80/20",
          "La localidad es el factor dominante del rendimiento"],
         ["Exp3", "Detección de thrashing", "Umbral 50%",
-         "Thrashing identificable al incrementar multiprogramación"],
+         "Riesgo heuristico >50% al incrementar multiprogramacion"],
         ["Exp4", "Carga de trabajo", "Localidad vs aleatorio",
-         "La tasa converge; diferencia se amplifica con más marcos"],
+         "Comparacion de localidad y aleatorio con cuatro marcos fijos"],
         ["Exp5", "Quantum Round Robin", "Q=1..13",
-         "Tradeoff entre respuesta (Q bajo) y overhead (Q alto)"],
-        ["Exp6", "Tipos de carga", "CPU/IO/Mixta/Escalonada",
-         "IO-bound se beneficia más de RR; escalonada reduce competencia"],
+         "Quantum bajo: mejor respuesta y mas cambios (sin coste de contexto)"],
+        ["Exp6", "Tipos de carga", "Largas/Cortas/Mixta/Escalonada",
+         "Rafagas cortas y llegadas escalonadas reducen tiempos en estas cargas"],
     ]
+
+    if not MODO_DEMO:
+        resumen.append(["Exp7", "CPU + memoria", "Quantum, marcos y coste de fallo",
+                        "Servicio sincrono de fallos reduce CPU util y aumenta tiempos"])
 
     guardar_csv("resumen_experimentos.csv",
                 ["experimento", "titulo", "configuracion", "conclusion_clave"],
@@ -732,60 +826,58 @@ def generar_resumen_consolidado():
 # ──────────────────────────────────────────────────────────
 
 def main():
-    global MODO_DEMO
-
-    # Forzar UTF-8 en stdout para Windows (símbolos Unicode)
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-
-    print("=" * 64)
-    print("  GRUPO 3 — Métricas, Análisis e Informe Técnico")
-    print("  Generación automática de experimentos y gráficos")
-    print("=" * 64)
-
-    if not HAS_MPL:
-        print("\n⚠  matplotlib no disponible — solo tablas de texto y CSV.")
-        print("   Instalar con:  pip install matplotlib\n")
-
-    # Verificar binarios — si no están, usar modo demo
-    binarios_ok = True
-    for nombre, ruta in [("memoria", BIN_MEMORIA),
-                         ("planificador", BIN_PLANIFICADOR)]:
-        try:
-            subprocess.run([ruta, "-h"], capture_output=True, timeout=5)
-        except (FileNotFoundError, PermissionError, OSError):
-            print(f"⚠  No se encuentra {ruta}.")
-            binarios_ok = False
-
-    if not binarios_ok:
-        print("\n╔══════════════════════════════════════════════════════╗")
-        print("║  MODO DEMO: usando simulaciones internas en Python  ║")
-        print("║  Para resultados reales, compilar con 'make all'.   ║")
-        print("╚══════════════════════════════════════════════════════╝")
-        MODO_DEMO = True
-    else:
-        print("\n  ✓ Binarios encontrados — modo ejecución real.")
-
-    # Ejecutar los seis experimentos
+    global MODO_DEMO, BIN_MEMORIA, BIN_PLANIFICADOR, BIN_INTEGRADA
+    global DIR_GRAFICOS, DIR_CSV, HAS_MPL
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("memoria", nargs="?", default=BIN_MEMORIA)
+    parser.add_argument("planificador", nargs="?", default=BIN_PLANIFICADOR)
+    parser.add_argument("integrada", nargs="?", default=BIN_INTEGRADA)
+    parser.add_argument("--demo", action="store_true", help="6 experimentos Python en docs/graficos/demo")
+    parser.add_argument("--solo-tablas", action="store_true", help="Generar CSV sin requerir matplotlib")
+    args = parser.parse_args()
+    BIN_MEMORIA, BIN_PLANIFICADOR, BIN_INTEGRADA = args.memoria, args.planificador, args.integrada
+    MODO_DEMO = args.demo
+    if not args.solo_tablas and not HAS_MPL:
+        parser.error("Falta matplotlib. Instale requirements.txt en .venv o use --solo-tablas.")
+    HAS_MPL = HAS_MPL and not args.solo_tablas
+    binarios = [BIN_MEMORIA, BIN_PLANIFICADOR, BIN_INTEGRADA]
+    if not MODO_DEMO:
+        for ruta in binarios:
+            try:
+                r = subprocess.run([ruta, "-h"], capture_output=True, timeout=5)
+            except (OSError, subprocess.TimeoutExpired) as error:
+                parser.error(f"No se pudo ejecutar {ruta}: {error}. Ejecute make all.")
+            if r.returncode:
+                parser.error(f"El binario {ruta} fallo al consultar -h.")
+    DIR_GRAFICOS = RAIZ / "docs" / "graficos"
+    if MODO_DEMO:
+        DIR_GRAFICOS /= "demo"
+    DIR_CSV = DIR_GRAFICOS
+    DIR_GRAFICOS.mkdir(parents=True, exist_ok=True)
+    print("MODO DEMO EXPLICITO (6 experimentos Python)" if MODO_DEMO else
+          "MODO REAL: 7 experimentos con los ejecutables C")
     experimento_1()
     experimento_2()
     experimento_3()
     experimento_4()
     experimento_5()
     experimento_6()
-
-    # Generar resumen consolidado
+    if not MODO_DEMO:
+        experimento_7()
     generar_resumen_consolidado()
-
-    print("\n" + "=" * 64)
-    print("  Análisis completado.")
-    if MODO_DEMO:
-        print("  ⚠ Resultados generados en MODO DEMO (simulación Python).")
-    if HAS_MPL:
-        print(f"  Gráficos guardados en: {DIR_GRAFICOS}/")
-    print(f"  Tablas CSV en:        {DIR_CSV}/")
-    print("  Informe técnico:      docs/informe_tecnico.md")
-    print("=" * 64)
+    metadata = {
+        "modo": "demo" if MODO_DEMO else "real",
+        "fecha_utc": datetime.now(timezone.utc).isoformat(),
+        "python": sys.version.split()[0],
+        "matplotlib": matplotlib.__version__ if HAS_MPL else None,
+        "binarios_sha256": {} if MODO_DEMO else {
+            str(Path(b).resolve()): hashlib.sha256(Path(b).read_bytes()).hexdigest() for b in binarios},
+        "experimentos": 6 if MODO_DEMO else 7,
+        "semillas": {"patrones": 42, "multiprogramacion": "2026 + PID"},
+        "modelo_integrado": "Servicio sincrono; coste de fallo 0 y 5 ms; sin E/S asincrona",
+    }
+    (DIR_CSV / "metadata.json").write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"Analisis completado: {DIR_GRAFICOS}")
 
 
 if __name__ == "__main__":

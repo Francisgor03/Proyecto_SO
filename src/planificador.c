@@ -42,6 +42,7 @@ int inicializar_planificador(planificador_t *plan, int quantum, int n, proceso_t
         p->tiempo_espera = 0;
         p->tiempo_retorno = 0;
         p->tiempo_respuesta = 0;
+        p->tiempo_bloqueado = 0;
         p->estado = ESTADO_NUEVO;
         p->inicio_registrado = false;
     }
@@ -88,6 +89,7 @@ int ejecutar_round_robin(planificador_t *plan) {
         if (!cantidad && siguiente < n && llegadas[siguiente].llegada > tiempo_actual) {
             int hasta = llegadas[siguiente].llegada;
             printf(" CPU IDLE [%d - %d] |", tiempo_actual, hasta);
+            plan->tiempo_ocioso += hasta - tiempo_actual;
             tiempo_actual = hasta;
         }
         while (siguiente < n && llegadas[siguiente].llegada <= tiempo_actual) {
@@ -111,17 +113,29 @@ int ejecutar_round_robin(planificador_t *plan) {
         if (anterior != -1 && anterior != idx) plan->cambios_contexto++;
         anterior = idx;
         int rebanada = p->tiempo_restante > plan->quantum ? plan->quantum : p->tiempo_restante;
-        printf("  P%d [%d - %d]  |", p->pid, tiempo_actual, tiempo_actual + rebanada);
+        int inicio_turno = tiempo_actual;
         for (int unidad = 0; unidad < rebanada; unidad++) {
-            if (plan->acceso_cpu &&
-                plan->acceso_cpu(p, tiempo_actual, plan->datos_acceso_cpu)) {
+            int demora = plan->acceso_cpu ?
+                plan->acceso_cpu(p, tiempo_actual, plan->datos_acceso_cpu) : 0;
+            /* Reservar tambien el tick productivo que sigue al servicio. */
+            if (demora < 0 || tiempo_actual == INT_MAX ||
+                demora > INT_MAX - tiempo_actual - 1) {
                 free(llegadas);
                 free(cola);
                 return -1;
             }
+            if (demora) {
+                p->estado = ESTADO_BLOQUEADO;
+                tiempo_actual += demora;
+                p->tiempo_bloqueado += demora;
+                plan->tiempo_bloqueado += demora;
+                p->estado = ESTADO_EJECUTANDO;
+            }
             tiempo_actual++;
+            plan->tiempo_cpu++;
+            p->tiempo_restante--;
         }
-        p->tiempo_restante -= rebanada;
+        printf("  P%d [%d - %d]  |", p->pid, inicio_turno, tiempo_actual);
 
         /* Llegadas durante el turno, incluida su frontera final, antes de reencolar
          * al proceso interrumpido. Se respeta orden cronologico, no orden del PCB. */
@@ -137,7 +151,7 @@ int ejecutar_round_robin(planificador_t *plan) {
             p->estado = ESTADO_TERMINADO;
             p->tiempo_fin = tiempo_actual;
             p->tiempo_retorno = tiempo_actual - p->tiempo_llegada;
-            p->tiempo_espera = p->tiempo_retorno - p->rafaga_cpu;
+            p->tiempo_espera = p->tiempo_retorno - p->rafaga_cpu - p->tiempo_bloqueado;
             completados++;
         } else {
             p->estado = ESTADO_LISTO;
@@ -146,6 +160,7 @@ int ejecutar_round_robin(planificador_t *plan) {
             cantidad++;
         }
     }
+    plan->tiempo_total = tiempo_actual;
     printf("\n======================================================\n");
     printf("Despachos: %d | Cambios de contexto entre procesos: %d\n\n",
            plan->despachos, plan->cambios_contexto);

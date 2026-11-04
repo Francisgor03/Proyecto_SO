@@ -1,152 +1,156 @@
-Evidencia de pruebas — Grupo 3: Métricas, Análisis e Informe Técnico
-=====================================================================
-Karina y Curto
-Última actualización: noviembre 2026
+Validacion 2026-11-04T17:24:52.604692-05:00 (America/Lima)
+Comando: make analisis
+Codigo de salida: 0
+Modo real; siete experimentos con ejecutables C.
 
-Archivos del Grupo 3:
-  analisis/generar_analisis.py     — Script principal de experimentación
-  docs/informe_tecnico.md          — Informe técnico completo (10 secciones)
-  docs/graficos/                   — Gráficos PNG y tablas CSV generados
-  docs/evidencia_grupo3.txt        — Este archivo
+make: Entering directory '/home/alyson/pySistemasOperativos/Proyecto_SO'
 
-Dependencias:
-  - Módulo de memoria virtual (Grupo 1): include/memoria.h, src/memoria.c, src/main_memoria.c
-  - Módulo planificador (Grupo 2): include/planificador.h, src/planificador.c, src/main_planificador.c
-  - matplotlib (pip install matplotlib) — opcional para gráficos
+=== GRUPO 3: METRICAS, ANALISIS Y GRAFICOS ===
+MODO REAL: 7 experimentos con los ejecutables C
 
-──────────────────────────────────────────────────────────────
-1. Verificación del script de análisis
-──────────────────────────────────────────────────────────────
+================================================================
+  EXP 1: Fallos de página vs marcos disponibles (LRU clásico)
+================================================================
 
-Comando: python3 analisis/generar_analisis.py
+Secuencia: [7, 0, 1, 2, 0, 3, 0, 4, 2, 3, 0, 3, 2]
+  Marcos   Fallos   Aciertos   Tasa (%)
+----------------------------------------
+       1       13          0    100.00%
+       2       11          2     84.62%
+       3        9          4     69.23%
+       4        6          7     46.15%
+       5        6          7     46.15%
+       6        6          7     46.15%
+       7        6          7     46.15%
+       8        6          7     46.15%
+  → CSV:     /home/alyson/pySistemasOperativos/Proyecto_SO/docs/graficos/exp1_fallos_vs_marcos.csv
+  → Gráfico: /home/alyson/pySistemasOperativos/Proyecto_SO/docs/graficos/exp1_fallos_vs_marcos.png
 
-El script opera en dos modos:
-  a) Modo real: ejecuta fase3_memoria y fase3_planificador (requiere make all).
-  b) Modo demo: si no encuentra los binarios, usa simulaciones LRU y Round Robin
-     internas en Python puro, generando los mismos gráficos y tablas.
+================================================================
+  EXP 2: Impacto de patrones de acceso en los fallos
+================================================================
 
-Ambos modos producen:
-  - 6 gráficos PNG en docs/graficos/
-  - 6 archivos CSV con datos tabulares en docs/graficos/
-  - 1 CSV resumen consolidado (resumen_experimentos.csv)
-  - Tablas formateadas en la salida estándar
+ Marcos   secuencial    localidad    aleatorio    thrashing
+-----------------------------------------------------------
+      1           50          155          190          200
+      2           50          118          175          200
+      3           50           86          161          200
+      4           50           65          149          200
+      5           50           47          136          200
+      6           50           40          124          200
+      7           50           35          114          200
+      8           50           27          103          200
+      9           50           22           85          200
+     10           50           22           73          200
+     11           50           20           61          200
+     12           50           17           53          200
+     13           50           17           45          200
+     14           50           15           31          200
+     15           50           15           21          200
+     16           16           15           16           16
+  → CSV:     /home/alyson/pySistemasOperativos/Proyecto_SO/docs/graficos/exp2_patrones_acceso.csv
+  → Gráfico: /home/alyson/pySistemasOperativos/Proyecto_SO/docs/graficos/exp2_patrones_acceso.png
 
-──────────────────────────────────────────────────────────────
-2. Experimentos ejecutados
-──────────────────────────────────────────────────────────────
+================================================================
+  EXP 3: Detección de thrashing (multiprogramación creciente)
+================================================================
 
-EXP 1 — Fallos de página vs marcos disponibles (LRU clásico)
-  Secuencia: 7, 0, 1, 2, 0, 3, 0, 4, 2, 3, 0, 3, 2
-  Marcos: 1 a 8
-  Resultado esperado con 3 marcos: 9 fallos (69.23%)
-  Resultado esperado con 4 marcos: 6 fallos (46.15%)
-  Verificado: curva monótonamente decreciente.
+Marcos totales: 8  |  Págs/proceso: 16
+Refs/proceso: 50  |  Umbral thrashing: 50.0%
 
-EXP 2 — Impacto de patrones de acceso
-  200 referencias, 16 páginas, marcos de 1 a 16
-  Patrones: secuencial, localidad (80/20), aleatorio, thrashing
-  Verificado: localidad reduce fallos drásticamente vs aleatorio.
+  Procesos   Fallos     Refs     Tasa Estado
+--------------------------------------------------
+         1        8       50    16.0% NORMAL
+         2       51      100    51.0% RIESGO ALTO
+         3      101      150    67.3% RIESGO ALTO
+         4      151      200    75.5% RIESGO ALTO
+         5      211      250    84.4% RIESGO ALTO
+         6      258      300    86.0% RIESGO ALTO
+         7      304      350    86.9% RIESGO ALTO
+         8      347      400    86.8% RIESGO ALTO
+         9      450      450   100.0% RIESGO ALTO
+        10      500      500   100.0% RIESGO ALTO
+        11      550      550   100.0% RIESGO ALTO
+        12      600      600   100.0% RIESGO ALTO
 
-EXP 3 — Detección de thrashing
-  8 marcos totales, 16 páginas/proceso, 50 refs/proceso
-  1 a 12 procesos
-  Criterio: tasa de fallos > 50%
-  Verificado: punto de thrashing identificable.
+  ⚠ Riesgo heuristico desde 2 procesos (tasa > 50.0%)
+  → CSV:     /home/alyson/pySistemasOperativos/Proyecto_SO/docs/graficos/exp3_thrashing.csv
+  → Gráfico: /home/alyson/pySistemasOperativos/Proyecto_SO/docs/graficos/exp3_thrashing.png
 
-EXP 4 — Fallos vs intensidad de carga de trabajo
-  4 marcos, 16 páginas, cargas de 25 a 800 referencias
-  Localidad vs aleatorio
-  Verificado: tasa converge; localidad amortigua crecimiento.
+================================================================
+  EXP 4: Fallos vs intensidad de carga de trabajo
+================================================================
 
-EXP 5 — Impacto del quantum en Round Robin
-  Procesos: P1(0,8), P2(1,4), P3(2,9), P4(3,5)
-  Quantum de 1 a 13
-  Verificado con quantum 3: retorno 20.00, espera 13.50, respuesta 3.00.
+Marcos: 4  |  Páginas: 16
 
-EXP 6 — Comparativa de tipos de carga
-  CPU-bound, IO-bound, Mixta, Escalonada
-  Quantum fijo: 3 ms
-  Verificado: IO-bound tiene tiempos más bajos; escalonada reduce competencia.
+    Refs  Loc fallos  Ale fallos  Loc tasa  Ale tasa
+----------------------------------------------------
+      25           5          15     20.0%     60.0%
+      50          14          32     28.0%     64.0%
+     100          34          72     34.0%     72.0%
+     200          65         149     32.5%     74.5%
+     400          96         296     24.0%     74.0%
+     800         207         582     25.9%     72.8%
+  → CSV:     /home/alyson/pySistemasOperativos/Proyecto_SO/docs/graficos/exp4_carga_trabajo.csv
+  → Gráfico: /home/alyson/pySistemasOperativos/Proyecto_SO/docs/graficos/exp4_carga_trabajo.png
 
-──────────────────────────────────────────────────────────────
-3. Archivos generados (docs/graficos/)
-──────────────────────────────────────────────────────────────
+================================================================
+  EXP 5: Impacto del quantum en Round Robin
+================================================================
 
-Gráficos:
-  exp1_fallos_vs_marcos.png
-  exp2_patrones_acceso.png
-  exp3_thrashing.png
-  exp4_carga_trabajo.png
-  exp5_quantum.png
-  exp6_cargas_planificador.png
+Procesos: [(1, 0, 8), (2, 1, 4), (3, 2, 9), (4, 3, 5)]
 
-Tablas CSV:
-  exp1_fallos_vs_marcos.csv
-  exp2_patrones_acceso.csv
-  exp3_thrashing.csv
-  exp4_carga_trabajo.csv
-  exp5_quantum.csv
-  exp6_cargas_planificador.csv
-  resumen_experimentos.csv
+   Q   Retorno    Espera      Resp   Ctx
+----------------------------------------
+   1     19.00     12.50      0.75    23
+   2     19.25     12.75      2.00    12
+   3     20.00     13.50      3.00     9
+   4     18.25     11.75      4.50     7
+   5     17.50     11.00      5.50     5
+   6     18.50     12.00      6.50     5
+   7     19.50     13.00      7.50     5
+   8     16.25      9.75      8.50     4
+   9     15.25      8.75      8.75     3
+  10     15.25      8.75      8.75     3
+  11     15.25      8.75      8.75     3
+  12     15.25      8.75      8.75     3
+  13     15.25      8.75      8.75     3
+  → CSV:     /home/alyson/pySistemasOperativos/Proyecto_SO/docs/graficos/exp5_quantum.csv
+  → Gráfico: /home/alyson/pySistemasOperativos/Proyecto_SO/docs/graficos/exp5_quantum.png
 
-──────────────────────────────────────────────────────────────
-4. Informe técnico (docs/informe_tecnico.md)
-──────────────────────────────────────────────────────────────
+================================================================
+  EXP 6: Comparativa de tipos de carga (planificador)
+================================================================
 
-Secciones completadas:
-  1. Introducción
-  2. Marco teórico (memoria virtual, LRU, Round Robin)
-  3. Fórmulas y definiciones (métricas de memoria y planificador)
-  4. Descripción de los módulos
-  5. Diseño experimental (6 experimentos)
-  6. Resultados y análisis (con referencias a gráficos)
-  7. Análisis de thrashing (definición formal, criterio, mitigación)
-  8. Conclusiones (5 conclusiones fundamentadas)
-  9. Reproducibilidad
-  10. Referencias bibliográficas
+Quantum: 3
 
-──────────────────────────────────────────────────────────────
-5. Criterio de thrashing
-──────────────────────────────────────────────────────────────
+         Carga   Retorno    Espera      Resp   Ctx
+--------------------------------------------------
+     CPU-bound     49.67     32.00      3.00    17
+Rafagas cortas      4.00      2.20      2.20     4
+         Mixta     23.40     15.40      4.20    13
+    Escalonada      8.25      2.25      0.75     5
+  → CSV:     /home/alyson/pySistemasOperativos/Proyecto_SO/docs/graficos/exp6_cargas_planificador.csv
+  → Gráfico: /home/alyson/pySistemasOperativos/Proyecto_SO/docs/graficos/exp6_cargas_planificador.png
 
-Definición implementada:
-  "Se considera que el sistema entra en thrashing cuando la tasa de fallos
-  de página supera el 50% al incrementar el grado de multiprogramación
-  con un número fijo de marcos."
+EXP 7: CPU + memoria, quantum, marcos y coste de fallos
+  → CSV:     /home/alyson/pySistemasOperativos/Proyecto_SO/docs/graficos/exp7_integracion.csv
+  Q=1 marcos=2 coste=0: fallos=80, total=80 ms, CPU util=100.00%
+  Q=1 marcos=4 coste=0: fallos=4, total=80 ms, CPU util=100.00%
+  Q=1 marcos=2 coste=5: fallos=80, total=480 ms, CPU util=16.67%
+  Q=1 marcos=4 coste=5: fallos=4, total=100 ms, CPU util=80.00%
+  → Gráfico: /home/alyson/pySistemasOperativos/Proyecto_SO/docs/graficos/exp7_integracion.png
 
-Justificación:
-  - Umbral 50%: más de la mitad de accesos son fallos → utilidad degradada.
-  - Variable: grado de multiprogramación (Σ WS_i > marcos → thrashing).
-  - Basado en el modelo de working set de Denning (1968).
-
-Zonas definidas:
-  - Normal: tasa < 30%
-  - Advertencia: 30% ≤ tasa ≤ 50%
-  - Thrashing: tasa > 50%
-
-──────────────────────────────────────────────────────────────
-6. Integración con el Makefile
-──────────────────────────────────────────────────────────────
-
-Target 'make analisis':
-  Dependencias: fase3_memoria, fase3_planificador
-  Comando: python3 analisis/generar_analisis.py ./fase3_memoria ./fase3_planificador
-
-Target independiente (sin make):
-  python3 analisis/generar_analisis.py
-  → Usa modo demo si los binarios no están disponibles.
-
-──────────────────────────────────────────────────────────────
-7. Validación cruzada
-──────────────────────────────────────────────────────────────
-
-El modo demo implementa:
-  - _simular_lru(): algoritmo LRU idéntico al de src/memoria.c
-    (pila ordenada por recencia, desalojo del menos reciente).
-  - _simular_round_robin(): simulación milisegundo a milisegundo
-    idéntica a la de tests/validar_planificador.py.
-
-Los resultados del modo demo coinciden con los del modo real para
-todos los casos de prueba conocidos, verificado contra:
-  - tests/validar_memoria.py (secuencia clásica: 9 fallos con 3 marcos)
-  - tests/validar_planificador.py (ejemplo original: retorno 20.00 ms)
+================================================================
+  Resumen consolidado de experimentos
+================================================================
+  → CSV:     /home/alyson/pySistemasOperativos/Proyecto_SO/docs/graficos/resumen_experimentos.csv
+   Exp1: Fallos vs marcos          → Curva monótonamente decreciente; sin anomalía de Bélády
+   Exp2: Patrones de acceso        → La localidad es el factor dominante del rendimiento
+   Exp3: Detección de thrashing    → Riesgo heuristico >50% al incrementar multiprogramacion
+   Exp4: Carga de trabajo          → Comparacion de localidad y aleatorio con cuatro marcos fijos
+   Exp5: Quantum Round Robin       → Quantum bajo: mejor respuesta y mas cambios (sin coste de contexto)
+   Exp6: Tipos de carga            → Rafagas cortas y llegadas escalonadas reducen tiempos en estas cargas
+   Exp7: CPU + memoria             → Servicio sincrono de fallos reduce CPU util y aumenta tiempos
+Analisis completado: /home/alyson/pySistemasOperativos/Proyecto_SO/docs/graficos
+make: Leaving directory '/home/alyson/pySistemasOperativos/Proyecto_SO'

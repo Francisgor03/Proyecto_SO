@@ -3,7 +3,9 @@ set -euo pipefail
 bin="${1:-./fase2_concurrente_stress}"
 scenario="${2:-PRUEBA CONCURRENTE}"
 runs="${RUNS:-20}"
-limit="${LIMIT:-15s}"
+# WSL y la traza de 10 000 datos pueden superar 15 s aun con progreso.
+# Mantener una cota finita sin reducir datos ni repeticiones.
+limit="${LIMIT:-60s}"
 [[ "$runs" =~ ^[1-9][0-9]*$ ]] || { echo 'RUNS debe ser positivo'; exit 1; }
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT

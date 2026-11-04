@@ -1,0 +1,17 @@
+{
+  "modo": "real",
+  "fecha_utc": "2026-11-04T22:31:59.726783+00:00",
+  "python": "3.14.4",
+  "matplotlib": "3.11.2",
+  "binarios_sha256": {
+    "/home/alyson/pySistemasOperativos/Proyecto_SO/fase3_memoria": "c122efa61baa86fecfb6c0a4adfee375e673d1a9e63c386903c4f02cc52bfc67",
+    "/home/alyson/pySistemasOperativos/Proyecto_SO/fase3_planificador": "c230c3703551d43709302e77139754cdee20ebf5cc1b1d54bb98576cf4a8f40f",
+    "/home/alyson/pySistemasOperativos/Proyecto_SO/fase3_integrada": "64835a946822febf150a88639cd4758ad30744e6e9109983fa72b1512d83f568"
+  },
+  "experimentos": 7,
+  "semillas": {
+    "patrones": 42,
+    "multiprogramacion": "2026 + PID"
+  },
+  "modelo_integrado": "Servicio sincrono; coste de fallo 0 y 5 ms; sin E/S asincrona"
+}

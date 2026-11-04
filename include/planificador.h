@@ -9,6 +9,7 @@ typedef enum {
     ESTADO_NUEVO,
     ESTADO_LISTO,
     ESTADO_EJECUTANDO,
+    ESTADO_BLOQUEADO,
     ESTADO_TERMINADO
 } estado_proceso_t;
 
@@ -26,9 +27,10 @@ struct proceso {
     // Métricas requeridas por rúbrica
     int tiempo_inicio;    // Primer instante en que obtiene la CPU
     int tiempo_fin;       // Instante en que culmina
-    int tiempo_espera;    // Retorno - Ráfaga
+    int tiempo_espera;    // Retorno - Rafaga - Bloqueo
     int tiempo_retorno;   // Fin - Llegada
     int tiempo_respuesta; // Inicio - Llegada
+    int tiempo_bloqueado; // Servicio sincrono de fallos de pagina
     
     estado_proceso_t estado;
     bool inicio_registrado;
@@ -41,6 +43,10 @@ typedef struct {
     proceso_t *procesos;
     int despachos;
     int cambios_contexto;
+    int tiempo_total;
+    int tiempo_cpu;
+    int tiempo_ocioso;
+    int tiempo_bloqueado;
     acceso_cpu_callback_t acceso_cpu;
     void *datos_acceso_cpu;
 } planificador_t;
@@ -52,7 +58,10 @@ typedef struct {
  * Empates de llegada: orden original del arreglo. El arreglo no se reordena. */
 int inicializar_planificador(planificador_t *plan, int quantum, int num_procesos, proceso_t *procesos);
 int ejecutar_round_robin(planificador_t *plan);
-/* Ejecuta el callback una vez por cada unidad de CPU asignada. */
+/* Ejecuta el callback antes de cada unidad de CPU asignada.
+ * Retorno: -1/error negativo, 0/sin demora, positivo/ms de servicio sincrono.
+ * La demora bloquea la CPU completa, no consume quantum y se resta de la
+ * espera del proceso atendido. No modela E/S asincrona ni costo de contexto. */
 void planificador_configurar_acceso_cpu(planificador_t *plan,
                                          acceso_cpu_callback_t callback,
                                          void *datos);

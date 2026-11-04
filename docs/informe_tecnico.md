@@ -1,465 +1,302 @@
-# Informe Técnico — Entrega 3: Simulador de Sistema Operativo
+# Informe técnico: Entrega 3, CoreOS-IF0702
 
-## Grupo 3: Métricas, Análisis e Informe Técnico — Karina y Curto
+## 1. Objetivo y relación con la rúbrica
 
----
+Se implementa un motor de planificación Round Robin acoplado a memoria virtual
+paginada con reemplazo LRU global. Se registran traducciones, fallos, víctimas,
+conmutaciones, tiempos por proceso y resultados comparativos de paginación.
 
-## 1. Introducción
-
-Este informe documenta el análisis de los dos módulos centrales de la
-entrega 3 del proyecto de sistemas operativos:
-
-1. **Simulador de Memoria Virtual** (Grupo 1 — Diogo y Ariana): paginación
-   con reemplazo LRU.
-2. **Planificador de CPU** (Grupo 2 — Alyson y Gerald): Round Robin con
-   quantum configurable.
-
-El objetivo es evaluar experimentalmente el comportamiento de ambos módulos
-bajo distintas condiciones, generar gráficos y tablas comparativas, y definir
-un criterio formal para identificar situaciones de *thrashing*.
-
-Todos los resultados se basan en **ejecuciones reales** de los binarios
-`fase3_memoria` y `fase3_planificador`, procesadas con el script
-`analisis/generar_analisis.py`.
-
----
-
-## 2. Marco Teórico
-
-### 2.1 Memoria Virtual y Paginación
-
-La **memoria virtual** permite que cada proceso opere con un espacio de
-direcciones propio, independiente de la cantidad de memoria física disponible.
-El espacio virtual se divide en **páginas** de tamaño fijo; la memoria física
-se divide en **marcos** del mismo tamaño. Una **tabla de páginas** por proceso
-mapea cada página virtual a un marco físico cuando está residente.
-
-Cuando un proceso referencia una página que no está en memoria física, ocurre
-un **fallo de página** (*page fault*): el sistema operativo debe cargar la
-página al seleccionar un marco libre o, si todos están ocupados, **reemplazar**
-una página residente.
-
-#### Traducción de direcciones
-
-Para una dirección virtual `V` y un tamaño de página `S`:
-
-```
-página          = V ÷ S          (división entera)
-desplazamiento  = V mod S
-dirección_física = marco × S + desplazamiento
-```
-
-La traducción se realiza consultando la tabla de páginas del proceso.  Si el
-bit de presencia indica que la página está cargada, se obtiene directamente el
-marco asignado.
-
-### 2.2 Algoritmo de Reemplazo LRU
-
-**LRU** (*Least Recently Used*) reemplaza la página que no ha sido referenciada
-durante más tiempo.  El fundamento es el principio de **localidad temporal**: si
-una página fue accedida recientemente, es probable que se acceda de nuevo pronto.
-
-En la implementación del Grupo 1:
-
-- Cada marco almacena un campo `ultimo_acceso` (un contador lógico monótono).
-- **Tanto los fallos como los aciertos** actualizan este campo.
-- Cuando se necesita un marco y todos están ocupados, se selecciona el marco
-  con el menor `ultimo_acceso`.
-- La política es **global**: puede desalojar páginas de cualquier proceso.
-
-**Complejidad:** O(*m*) por acceso, donde *m* es el número de marcos, ya que
-se busca linealmente el marco menos reciente.
-
-### 2.3 Planificación de CPU — Round Robin
-
-**Round Robin (RR)** es un algoritmo de planificación *preemptive* que asigna
-a cada proceso un intervalo fijo de tiempo de CPU llamado **quantum**.  Al
-agotarse, el proceso se reencola si aún tiene trabajo pendiente.
-
-Características clave de la implementación del Grupo 2:
-
-- Cola FIFO circular de capacidad igual al número de procesos.
-- Llegadas se encolan en orden cronológico.
-- Cuando un proceso termina su quantum pero no ha finalizado, se encolan
-  primero los procesos recién llegados y luego el proceso interrumpido.
-- Si la cola está vacía y hay procesos futuros, la CPU se marca como
-  ociosa (*IDLE*) hasta la próxima llegada.
-
----
-
-## 3. Fórmulas y Definiciones
-
-### 3.1 Métricas de Memoria Virtual
-
-| Métrica | Fórmula | Interpretación |
+| Criterio | Implementación | Evidencia reproducible |
 |---|---|---|
-| Tasa de fallos | `100 × fallos ÷ referencias` | Porcentaje de accesos que causan un fallo de página |
-| Tasa de aciertos | `100 × aciertos ÷ referencias` | `100% − tasa_fallos` |
-| Fallos absolutos | Conteo de `fallo = true` | Número total de page faults |
-| Aciertos absolutos | `referencias − fallos` | Accesos resueltos sin fallo |
-
-### 3.2 Métricas del Planificador
-
-| Métrica | Fórmula | Significado |
-|---|---|---|
-| Tiempo de respuesta | `T_inicio − T_llegada` | Tiempo hasta obtener la CPU por primera vez |
-| Tiempo de retorno (*turnaround*) | `T_fin − T_llegada` | Tiempo total en el sistema |
-| Tiempo de espera | `T_retorno − ráfaga_CPU` | Tiempo en cola sin ejecutar |
-| Promedio | `Σ métrica ÷ N` | Media aritmética sobre todos los procesos |
-| Despachos | Conteo de turnos ejecutados | Veces que se asigna la CPU |
-| Cambios de contexto | Despachos consecutivos con PID distinto | Conmutaciones reales entre procesos |
-
-### 3.3 Criterio de Thrashing
-
-Se define **thrashing** como la condición en la que el sistema dedica más
-tiempo a gestionar fallos de página que a ejecutar trabajo productivo.
-Operacionalmente, adoptamos el siguiente criterio cuantitativo:
-
-> **Definición:** Se considera que el sistema entra en thrashing cuando la
-> **tasa de fallos de página supera el 50%** al incrementar el grado de
-> multiprogramación (número de procesos activos) con un número fijo de marcos.
-
-#### Justificación
-
-1. **Umbral del 50%:** Cuando más de la mitad de los accesos provocan un fallo,
-   la utilidad de la memoria física se degrada críticamente.  Cada fallo implica
-   una operación de reemplazo que invalida otra página residente, generando un
-   efecto cascada.
-
-2. **Variable independiente — multiprogramación:** Al aumentar el número de
-   procesos con marcos fijos, el conjunto de trabajo (*working set*) de cada
-   proceso excede los marcos disponibles por proceso.  El modelo de Denning
-   establece que si `Σ WS_i > marcos_totales`, el sistema entra en thrashing.
-
-3. **Detección del punto de inflexión:** Se busca el grado de
-   multiprogramación a partir del cual la tasa de fallos cruza el umbral.
-   Este punto marca la capacidad máxima efectiva del sistema.
-
----
-
-## 4. Descripción de los Módulos
-
-### 4.1 Módulo de Memoria Virtual (Grupo 1)
-
-**Archivos:** `include/memoria.h`, `src/memoria.c`, `src/main_memoria.c`
-
-El módulo implementa:
-
-- **Estructuras de datos:**
-  - `entrada_pagina_t`: bit de presencia + número de marco.
-  - `marco_t`: estado (ocupado/libre), PID dueño, página residente,
-    último acceso.
-  - `memoria_t`: arreglos de tablas y marcos, contadores globales.
-  - `acceso_memoria_t`: resultado detallado de cada acceso.
-
-- **API:**
-  - `memoria_inicializar()`: configura marcos, tamaño de página, páginas
-    por proceso y número de procesos.
-  - `memoria_acceder()`: traduce dirección, detecta fallo/acierto, ejecuta
-    LRU si es necesario.
-  - `memoria_destruir()`: libera recursos.
-
-- **CLI:** Acepta parámetros `-m`, `-s`, `-p`, `-n`, `-c` y referencias como
-  `pid:dirección`.  Modo CSV para procesamiento automático.
-
-### 4.2 Módulo Planificador (Grupo 2)
-
-**Archivos:** `include/planificador.h`, `src/planificador.c`,
-`src/main_planificador.c`
-
-El módulo implementa:
-
-- **PCB:** `proceso_t` con PID, tiempos de llegada, ráfaga, inicio, fin,
-  espera, retorno, respuesta, estado y tiempo restante.
-
-- **Planificador:** `planificador_t` con quantum, arreglo de procesos,
-  contadores de despachos y cambios de contexto.
-
-- **API:**
-  - `inicializar_planificador()`: valida y prepara los PCB.
-  - `ejecutar_round_robin()`: simula la planificación completa con
-    diagrama de Gantt.
-  - `imprimir_metricas()`: tabla formateada con promedios.
-
-- **CLI:** Acepta `-q quantum` y procesos como `pid:llegada:ráfaga`.
-
----
-
-## 5. Diseño Experimental
-
-Se ejecutan seis experimentos controlados.  Cada uno varía un único parámetro
-mientras mantiene los demás fijos, aislando su efecto sobre las métricas.
-
-### 5.1 Experimento 1 — Fallos de página vs marcos disponibles
-
-- **Objetivo:** Verificar que más marcos reducen los fallos con LRU.
-- **Secuencia:** `7, 0, 1, 2, 0, 3, 0, 4, 2, 3, 0, 3, 2` (13 refs,
-  páginas de 256 bytes).
-- **Variable:** Marcos de 1 a 8.
-- **Resultado esperado:** Curva monótonamente decreciente (LRU no presenta
-  anomalía de Bélády).
-
-### 5.2 Experimento 2 — Patrones de acceso
-
-- **Objetivo:** Comparar el impacto de diferentes patrones de localidad.
-- **Patrones:** Secuencial, localidad (80/20), aleatorio, thrashing (peor caso).
-- **Configuración:** 200 referencias, 16 páginas, marcos de 1 a 16.
-- **Resultado esperado:** El patrón con localidad tiene muchos menos fallos
-  que el aleatorio o thrashing.
-
-### 5.3 Experimento 3 — Detección de thrashing
-
-- **Objetivo:** Identificar el punto de multiprogramación donde ocurre
-  thrashing.
-- **Configuración:** 8 marcos totales, 16 páginas/proceso, 50 refs/proceso.
-- **Variable:** 1 a 12 procesos.
-- **Criterio:** Tasa de fallos > 50%.
-
-### 5.4 Experimento 4 — Fallos vs intensidad de carga
-
-- **Objetivo:** Evaluar cómo la cantidad de referencias afecta los fallos
-  bajo distintos patrones.
-- **Configuración:** 4 marcos, 16 páginas, cargas de 25 a 800 referencias.
-- **Comparación:** Localidad vs aleatorio.
-
-### 5.5 Experimento 5 — Impacto del quantum
-
-- **Objetivo:** Evaluar el *tradeoff* entre quantum, tiempo de respuesta y
-  cambios de contexto.
-- **Procesos:** P1(0,8), P2(1,4), P3(2,9), P4(3,5).
-- **Variable:** Quantum de 1 a 13.
-
-### 5.6 Experimento 6 — Tipos de carga en el planificador
-
-- **Objetivo:** Comparar métricas bajo cargas CPU-bound, IO-bound, mixta y
-  escalonada.
-- **Quantum fijo:** 3 ms.
-
----
-
-## 6. Resultados y Análisis
-
-> **Nota:** Los gráficos se generan automáticamente con
-> `make analisis` o `python3 analisis/generar_analisis.py`.
-> Si los gráficos no se visualizan, ejecute primero ese comando.
-
-### 6.1 Experimento 1 — Fallos vs marcos
-
-![Fallos de página vs marcos disponibles](graficos/exp1_fallos_vs_marcos.png)
-
-**Observaciones:**
-
-- Con 1 marco, cada acceso a una página distinta causa un fallo (13 fallos
-  de 13 referencias = 100%).
-- Con 3 marcos (configuración clásica), se obtienen 9 fallos (69.23%).
-- Con 5 o más marcos, los fallos se reducen significativamente porque la
-  secuencia referencia solo 5 páginas distintas (0, 1, 2, 3, 4, 7).
-- La curva es **monótonamente decreciente**, confirmando que LRU no presenta
-  la anomalía de Bélády (que sí afecta a FIFO).
-- La mayor ganancia marginal ocurre al pasar de 3 a 5 marcos, donde se
-  acomoda el working set completo.
-
-### 6.2 Experimento 2 — Patrones de acceso
-
-![Impacto de patrones de acceso](graficos/exp2_patrones_acceso.png)
-
-**Observaciones:**
-
-- **Localidad (80/20):** Dramáticamente menos fallos que el aleatorio.  Con
-  solo 4 marcos cubre la mayor parte del hot set (20% de las páginas).
-- **Secuencial (localidad espacial):** Comportamiento predecible. Al acceder a
-  direcciones contiguas en memoria (múltiples referencias por página), los
-  accesos subsecuentes dentro de la misma página son aciertos inmediatos; la curva
-  se mantiene en una meseta constante (50 fallos) independientemente de los marcos
-  hasta que caben todas las páginas en memoria física (16 fallos).
-- **Aleatorio:** Alta tasa de fallos hasta que los marcos cubren la mayoría
-  de las páginas.
-- **Thrashing (peor caso):** Maximiza los fallos recorriendo todas las páginas
-  cíclicamente con un solo acceso por página. Solo con marcos ≥ páginas se eliminan los fallos.
-
-**Conclusión:** El principio de localidad es el factor más determinante del
-rendimiento de la memoria virtual.  Un buen diseño de software que maximice la
-localidad de referencia es más efectivo que agregar marcos.
-
-### 6.3 Experimento 3 — Detección de thrashing
-
-![Detección de thrashing](graficos/exp3_thrashing.png)
-
-**Observaciones:**
-
-- Con 1 proceso y 8 marcos, la tasa de fallos se mantiene baja (16.0%, operación normal).
-- A partir de 2 procesos, el working set combinado (16 páginas) satura los 8
-  marcos físicos disponibles bajo la política de reemplazo global, disparando
-  la tasa al 53.0% y alcanzando la condición de **thrashing** (supera el umbral del 50%).
-- A medida que aumenta el grado de multiprogramación, los marcos promedio por
-  proceso disminuyen y la tasa de fallos continúa creciendo hasta alcanzar el 100%.
-- El **punto de thrashing** se identifica cuando la tasa supera el umbral
-  del 50%.  A partir de ese punto, agregar más procesos empeora drásticamente
-  el rendimiento.
-- Este comportamiento confirma el modelo de Denning: cuando la suma de los
-  working sets excede los marcos disponibles, el sistema entra en thrashing.
-
-**Implicación práctica:** Un sistema operativo debe monitorear la tasa de
-fallos y reducir el grado de multiprogramación (suspendiendo procesos) cuando
-se detecta thrashing.
-
-### 6.4 Experimento 4 — Carga de trabajo
-
-![Fallos vs carga de trabajo](graficos/exp4_carga_trabajo.png)
-
-**Observaciones:**
-
-- **Fallos absolutos:** Crecen linealmente con la carga para el patrón
-  aleatorio.  Con localidad, el crecimiento es más lento porque los aciertos
-  al hot set amortiguan los fallos.
-- **Tasa de fallos:** Se estabiliza rápidamente.  Después de las primeras
-  docenas de referencias, la tasa converge a un valor característico del
-  patrón.  Esto confirma que la tasa es una métrica estable para comparar
-  configuraciones.
-- La diferencia entre ambos patrones se amplifica con más marcos: la localidad
-  se beneficia más porque reutiliza eficientemente los marcos cargados.
-
-### 6.5 Experimento 5 — Impacto del quantum
-
-![Impacto del quantum](graficos/exp5_quantum.png)
-
-**Observaciones:**
-
-- **Quantum pequeño (1–2 ms):** Excelente tiempo de respuesta, pero muchos
-  cambios de contexto.  El overhead de conmutación puede dominar.
-- **Quantum grande (≥ 9 ms):** Los cambios de contexto se minimizan, pero
-  el tiempo de respuesta se degrada porque los procesos cortos esperan
-  turnos largos.
-- **Quantum intermedio (3–4 ms):** Balance razonable entre respuesta y
-  overhead.
-- El tiempo de retorno varía de forma no monótona: depende de cómo se
-  alinean las ráfagas con el quantum.
-- El tiempo de espera sigue un patrón similar al retorno, ya que
-  `espera = retorno − ráfaga`.
-
-**Regla empírica:** Un buen quantum es ligeramente mayor que el tiempo de la
-ráfaga típica de interacción.  Un quantum demasiado grande degenera en FCFS.
-
-### 6.6 Experimento 6 — Tipos de carga
-
-![Comparativa de cargas](graficos/exp6_cargas_planificador.png)
-
-**Observaciones:**
-
-- **CPU-bound:** Tiempos de retorno y espera altos porque los procesos largos
-  se interrumpen muchas veces.
-- **IO-bound (cortas):** Tiempos bajos porque las ráfagas terminan en pocos
-  quanta.  Round Robin es eficiente para este tipo de carga.
-- **Mixta:** Los procesos cortos se benefician de la preempción, pero los
-  largos sufren esperas acumuladas.
-- **Escalonada:** Al no competir simultáneamente, los tiempos son
-  significativamente menores.  El espaciado de llegadas actúa como una
-  forma natural de control de admisión.
-
----
-
-## 7. Análisis de Thrashing
-
-### 7.1 Definición formal
-
-El thrashing ocurre cuando el **working set** combinado de todos los procesos
-activos excede la memoria física disponible:
-
-```
-Σ |WS_i(t, Δ)| > marcos_totales
+| Memoria virtual (8 puntos) | Tablas por PID, traducción y LRU | `make test-memoria` |
+| Planificador (6 puntos) | Quantum, cola, Gantt y métricas | `make test-planificador` |
+| Métricas y análisis (4 puntos) | Siete experimentos, incluyendo CPU + memoria | `make analisis` |
+| Informe técnico (2 puntos) | Modelo, fórmulas, módulos y límites | Este informe y guías de módulos |
+
+El proyecto es un simulador de una CPU con tiempo discreto. No ejecuta procesos
+reales para las ráfagas simuladas; el shell POSIX de entregas anteriores sigue
+siendo un ejecutable separado y puede lanzar los simuladores como comandos.
+
+## 2. Arquitectura modular
+
+```text
+main_memoria.c ----> memoria.c <---- main_integrada.c ----> planificador.c <---- main_planificador.c
+                        ^                  |
+                        |                  +-- configura callback por tick
+                        +--------------------- acceso desde el proceso despachado
+
+analisis/generar_analisis.py --> ejecutables C --> CSV + PNG + metadata.json
 ```
 
-donde `WS_i(t, Δ)` es el conjunto de páginas referenciadas por el proceso `i`
-en las últimas `Δ` unidades de tiempo.
+- `include/memoria.h`, `src/memoria.c`: tablas por proceso, marcos, traducción y LRU.
+- `src/main_memoria.c`: interfaz de referencias y traza CSV independiente.
+- `include/planificador.h`, `src/planificador.c`: PCB, cola y reloj de Round Robin.
+- `src/main_planificador.c`: procesos configurables y demostración independiente.
+- `src/main_integrada.c`: cargas por proceso, callback, coste de fallo y resumen.
+- `analisis/generar_analisis.py`: cargas reproducibles y ejecución de experimentos.
+- `tests/`: validadores de algoritmos, integración y errores del análisis.
 
-### 7.2 Criterio operacional implementado
+Las guías [de memoria](memoria_virtual.md), [de planificación](planificador_round_robin.md)
+y [de integración](integracion_cpu_memoria.md) contienen contratos y ejemplos.
 
-Se monitorea la **tasa de fallos de página** conforme varía el grado de
-multiprogramación:
+## 3. Algoritmos y documentación matemática
 
+### 3.1 Paginación y LRU
+
+Cada PID tiene una tabla con presencia y marco. La memoria física es compartida;
+cada marco registra PID, página y contador lógico del último acceso.
+
+```text
+pagina = direccion_virtual / tamaño_pagina        (división entera)
+desplazamiento = direccion_virtual % tamaño_pagina
+direccion_fisica = marco * tamaño_pagina + desplazamiento
 ```
-tasa_fallos = 100 × fallos ÷ referencias_totales
-```
 
-- Si `tasa_fallos > 50%`: el sistema está en **thrashing**.
-- Si `tasa_fallos ∈ [30%, 50%]`: zona de **advertencia**, próxima al límite.
-- Si `tasa_fallos < 30%`: operación **normal**.
+Si la página no está presente se registra un fallo. Se elige primero el marco
+libre de menor índice; si no hay, se reemplaza el de menor `ultimo_acceso`.
+Se invalida la tabla de la víctima antes de registrar la nueva página. Tanto
+aciertos como fallos actualizan la recencia. La identidad es `(PID, página)`:
+la página 0 de dos procesos no es la misma página.
 
-### 7.3 Factores que agravan el thrashing
+Un acierto consulta la tabla en O(1). Un fallo busca un marco en O(M), con M
+marcos; el espacio es O(N*P + M), con N procesos y P páginas virtuales por proceso.
+Las páginas comienzan ausentes y los fallos iniciales cuentan.
 
-1. **Marcos insuficientes por proceso:** Cuando `marcos / procesos` es menor
-   que el working set de cada proceso.
-2. **Ausencia de localidad:** Patrones de acceso uniformemente distribuidos
-   impiden que LRU retenga páginas útiles.
-3. **Política de reemplazo global:** Al reemplazar páginas de cualquier
-   proceso, un proceso con alta actividad puede desalojar páginas de otros,
-   creando un efecto dominó.
+### 3.2 Round Robin
 
-### 7.4 Estrategias de mitigación
+Una lista auxiliar ordena llegadas por tiempo y, en empates, por orden original.
+La cola FIFO circular contiene como máximo N procesos. Cada turno consume
+`min(quantum, restante)` unidades productivas. Las llegadas durante el turno,
+incluida su frontera final, se encolan antes de reencolar al interrumpido.
+Si no hay procesos listos, se registra IDLE hasta la siguiente llegada.
 
-| Estrategia | Descripción |
+Estados: NUEVO -> LISTO -> EJECUTANDO -> LISTO o TERMINADO. En el modelo
+integrado, un fallo con coste positivo pasa temporalmente por BLOQUEADO.
+Se cuenta un despacho por turno y un cambio entre despachos consecutivos de PID
+distinto, incluso si hay un intervalo IDLE. El primer despacho y repetir el
+mismo PID no incrementan cambios. No se añade coste temporal por conmutación.
+
+### 3.3 Acoplamiento temporal
+
+Cada unidad productiva llama al módulo de memoria antes de avanzar el reloj.
+El callback devuelve 0 para acceso sin demora o el coste `C` si hubo fallo.
+Un valor negativo aborta con error. Durante el servicio síncrono la CPU completa
+espera, sin consumir quantum; después se ejecuta la unidad productiva.
+Se comprueban los límites del reloj entero para evitar desbordamientos.
+
+La memoria se carga antes de avanzar el reloj del servicio y no hay accesos
+concurrentes durante ese intervalo. Los marcos de procesos terminados se retienen
+hasta finalizar. Este modelo no contiene E/S asíncrona, TLB, contenido de páginas,
+páginas sucias ni disco real. Con coste cero reproduce el modelo sin latencia.
+
+### 3.4 Métricas
+
+| Métrica | Fórmula |
 |---|---|
-| **Control de admisión** | Limitar el grado de multiprogramación al detectar thrashing |
-| **Asignación local** | Asignar marcos fijos a cada proceso, evitando interferencia |
-| **Working set model** | Monitorear el WS y asignar al menos esa cantidad de marcos |
-| **Page Fault Frequency** | Ajustar marcos según la frecuencia de fallos por proceso |
+| Tasa de fallos | `100 * fallos / referencias` |
+| Aciertos | `referencias - fallos` |
+| Respuesta | `primer_despacho - llegada` |
+| Retorno | `fin - llegada` |
+| Bloqueo propio | `fallos_proceso * C` |
+| Espera en cola | `retorno - rafaga_CPU - bloqueo_propio` |
+| Promedio | `suma(metrica) / N` |
+| Servicio de fallos | `suma(bloqueos_propios)` |
+| Tiempo total desde t=0 | `CPU_productiva + servicio_fallos + ocioso` |
+| Utilización productiva | `100 * CPU_productiva / tiempo_total` |
+| Fracción de paginación | `100 * servicio_fallos / tiempo_total` |
+| Rendimiento | `referencias / tiempo_total` |
 
----
+La respuesta termina en el primer despacho, antes de servir su primer fallo.
+El Gantt incluye CPU y servicio dentro del turno; las demoras se identifican
+por acceso en la traza. En los módulos sin servicio, bloqueo=0 y se recupera
+la fórmula original de espera.
 
-## 8. Conclusiones
+## 4. Diseño experimental
 
-1. **LRU es efectivo con localidad:** La tasa de fallos se reduce
-   drásticamente cuando los accesos exhiben localidad temporal.  El
-   algoritmo LRU es óptimo entre los algoritmos en línea (no proféticos)
-   con factor competitivo *k* (número de marcos).
+Los experimentos 1 a 6 estudian los módulos independientes. El 7 ejecuta el
+motor integrado. Se usan las mismas cargas al comparar configuraciones y semillas
+fijas para patrones aleatorios. El experimento 7 es factorial: cruza quantum,
+marcos y coste, comparando resultados con los otros parámetros fijos.
 
-2. **El quantum es un compromiso:** No existe un quantum universalmente
-   óptimo.  Valores pequeños favorecen la interactividad; valores grandes
-   reducen el overhead.  El diseñador debe elegir según la carga esperada.
+| Exp. | Configuración | Variable |
+|---|---|---|
+| 1 | 13 referencias clásicas, páginas de 256 bytes | Marcos 1..8 |
+| 2 | 200 referencias, 16 páginas | Patrón y marcos 1..16 |
+| 3 | 8 marcos, 50 referencias/PID, 8 páginas activas de 16 virtuales | 1..12 procesos |
+| 4 | 4 marcos, 16 páginas | Longitud 25..800, localidad/aleatorio |
+| 5 | P1(0,8), P2(1,4), P3(2,9), P4(3,5) | Quantum 1..13 |
+| 6 | Quantum 3; ráfagas largas, cortas, mixtas o escalonadas | Tipo de carga |
+| 7 | 2 procesos en t=0, 40 ticks/PID, referencias cíclicas 0/256 | Marcos 1..8, quantum 1/2/4, coste 0/5 ms |
 
-3. **El thrashing es predecible:** El punto de inflexión donde la tasa de
-   fallos se dispara es identificable experimentalmente.  Un sistema operativo
-   real debe implementar monitoreo continuo y control de admisión.
+En el experimento 3 cada PID usa `Random(2026 + PID)`. Su carga se conserva al
+añadir procesos; se intercalan sus referencias por turno. Esto controla la
+comparación entre grados de multiprogramación. Los otros patrones aleatorios
+utilizan semilla 42. Las ráfagas cortas del experimento 6 representan trabajos
+CPU cortos; no son una simulación de dispositivos de E/S.
 
-4. **Los patrones de acceso dominan el rendimiento:** Incrementar marcos tiene
-   rendimientos decrecientes si el patrón de acceso no tiene localidad.
-   Optimizar el software para maximizar la localidad es la medida más
-   efectiva.
+## 5. Resultados y análisis
 
-5. **Round Robin es justo pero no óptimo:** Garantiza que todos los procesos
-   avanzan, pero no minimiza tiempos de espera como SJF.  Es una buena
-   elección para sistemas interactivos de propósito general.
+### 5.1 Fallos frente a marcos
 
----
+![Experimento 1](graficos/exp1_fallos_vs_marcos.png)
+
+La secuencia `7,0,1,2,0,3,0,4,2,3,0,3,2` contiene **seis páginas distintas**.
+Con 1 marco hay 13 fallos, con 3 hay 9 y con 4 o más hay 6. Cuatro marcos bastan
+para esta traza porque algunas páginas dejan de usarse antes de cargar las
+últimas. Los seis fallos iniciales permanecen aun con memoria suficiente.
+La curva observada no aumenta al añadir marcos.
+
+### 5.2 Patrones de acceso
+
+![Experimento 2](graficos/exp2_patrones_acceso.png)
+
+El patrón secuencial hace cuatro accesos por página: produce 50 fallos con 1..15
+marcos y 16 con 16 marcos. La localidad concentra el 80% de las elecciones en
+un conjunto de 3 páginas, y el resto en las 16 páginas. Con 4 marcos produce 65
+fallos frente a 149 del aleatorio. No es una garantía de que siempre supere al
+secuencial: son patrones distintos. El patrón cíclico adverso causa 200 fallos
+con menos de 16 marcos y 16 fallos iniciales con 16 marcos.
+
+### 5.3 Multiprogramación
+
+![Experimento 3](graficos/exp3_thrashing.png)
+
+Con un proceso se registran 8 fallos de 50 referencias (16%). Con dos hay 51
+fallos de 100 (51%) y se cruza el umbral heurístico del proyecto. Desde nueve
+procesos, una ronda requiere más páginas distintas de las que caben en ocho
+marcos y esta carga alcanza 100% de fallos. Las fluctuaciones entre puntos
+intermedios corresponden a las cargas reproducibles; la curva no es estrictamente
+creciente. Este experimento mide frecuencia de fallos; no mide tiempos de CPU.
+
+### 5.4 Longitud de carga
+
+![Experimento 4](graficos/exp4_carga_trabajo.png)
+
+Con cuatro marcos y 800 referencias, localidad produce 207 fallos (25.875%) y
+aleatorio 582 (72.75%). La tasa fluctúa por el patrón y por el arranque; la
+cantidad de referencias por sí sola no obliga a una tasa monótona. La comparación
+mantiene cuatro marcos fijos y no demuestra un efecto de variar marcos.
+
+### 5.5 Quantum
+
+![Experimento 5](graficos/exp5_quantum.png)
+
+Con quantum 3, los promedios son retorno 20 ms, espera 13.5 ms y respuesta 3 ms;
+hay 10 despachos y 9 cambios de contexto. Quantum 1 reduce la respuesta promedio
+a 0.75 ms y aumenta los cambios a 23. Con quantum >=9 hay tres cambios y respuesta
+8.75 ms. Se mide la cantidad de cambios, no su coste temporal: no se puede
+concluir una pérdida de rendimiento por overhead que el modelo no simula.
+
+### 5.6 Tipos de ráfaga
+
+![Experimento 6](graficos/exp6_cargas_planificador.png)
+
+La carga de ráfagas largas tiene retorno medio 49.67 ms; la de ráfagas cortas,
+4 ms. La escalonada tiene retorno 8.25 ms y espera 2.25 ms. Estos resultados
+comparan cargas con distintas longitudes y llegadas, y no prueban optimalidad
+universal de Round Robin. Las llegadas escalonadas todavía se solapan.
+
+### 5.7 Efecto conjunto de CPU y memoria
+
+![Experimento 7](graficos/exp7_integracion.png)
+
+Resultados con quantum 1 y 80 referencias:
+
+| Marcos | Coste/fallo | Fallos | Servicio | Total | CPU productiva |
+|---:|---:|---:|---:|---:|---:|
+| 2 | 0 ms | 80 | 0 ms | 80 ms | 100% |
+| 4 | 0 ms | 4 | 0 ms | 80 ms | 100% |
+| 2 | 5 ms | 80 | 400 ms | 480 ms | 16.67% |
+| 4 | 5 ms | 4 | 20 ms | 100 ms | 80% |
+
+Con coste positivo y dos marcos, la paginación ocupa 83.33% del tiempo. Con cuatro
+marcos ocupa 20%. Manteniendo dos marcos y coste 5, elevar quantum a 4 permite
+reutilizar páginas dentro de cada turno: los fallos bajan a 40 y el total a 280 ms.
+La evidencia muestra tanto el efecto del orden de CPU en LRU como el efecto de
+los fallos en los tiempos. La mejora depende de esta carga y del modelo síncrono.
+
+## 6. Interpretación de thrashing
+
+El proyecto usa la tasa de fallos como **indicador heurístico**: <30% NORMAL,
+30%..50% ADVERTENCIA y >50% RIESGO ALTO. Los límites se comparan con los conteos,
+sin redondear el porcentaje para decidir. El 50% es una elección experimental
+del equipo, no una definición universal ni una consecuencia automática del
+modelo de working set.
+
+Una tasa alta puede contener muchos fallos iniciales. Para evaluar su efecto se
+consideran también servicio de fallos, fracción de paginación, rendimiento y
+localidad. El experimento 7 exhibe degradación sostenida en una carga cíclica
+con memoria insuficiente y coste positivo. Con coste cero puede haber 100% de
+fallos sin pérdida temporal, lo que explica por qué no basta la tasa aislada.
+
+La condición de presión de memoria puede expresarse como
+`sum(|WS_i(t, ventana)|) > marcos`, donde WS es el conjunto de páginas distintas
+usadas en una ventana. Este proyecto no calcula working sets por ventana ni
+implementa control de admisión o asignación local. Esas son extensiones posibles,
+no funcionalidades demostradas por estos resultados.
+
+## 7. Validación y errores
+
+`make test-memoria` revisa traducciones, aislamiento por PID, víctimas LRU,
+límites e invariantes tras 10 000 accesos; compara además 15 escenarios de 150
+referencias con un modelo independiente.
+
+`make test-planificador` revisa estados, reinicio, 10 001 turnos, 151 procesos,
+7 casos dirigidos y 80 aleatorios. También valida callback con servicio, error,
+reinicio de bloqueos y desbordamiento de reloj.
+
+`make test-integrada` contrasta todas las columnas CSV, Gantt, métricas y tiempos
+con un modelo independiente: 7 casos dirigidos y 80 aleatorios. Sus 27 casos
+inválidos incluyen listas mal formadas, referencias fuera de rango, errores de
+traza y límites numéricos. Toda simulación fallida devuelve código distinto de cero.
+
+`make test-analisis` verifica umbrales, rechazo de salidas incompatibles y errores
+de los ejecutables, cargas por PID y separación entre resultados reales y demo.
+La suite completa también mantiene las verificaciones de entregas anteriores.
+El estrés conserva 20 repeticiones de 10 000 datos y una cota de 60 s por ejecución,
+configurable con `LIMIT`: con la traza completa, esta máquina WSL puede superar
+la cota anterior de 15 s aun avanzando correctamente. El límite no sustituye la
+verificación de cuotas, identidad de datos y ausencia de pérdidas/duplicados.
+
+## 8. Conclusiones y límites
+
+La implementación conserva el estado por proceso, aplica LRU correctamente y
+calcula las métricas de Round Robin. El acoplamiento permite que la planificación
+modifique la secuencia de referencias y que un fallo con coste aumente la duración.
+
+Los gráficos documentan cargas concretas; no prueban que un quantum, algoritmo
+o umbral sea óptimo en todos los sistemas. El servicio es síncrono y serializado:
+no se representa un SO que solape trabajo de otros procesos con E/S de disco.
+No se implementan contenidos de memoria ni políticas de admisión. Las métricas
+se interpretan dentro de esos supuestos explícitos.
 
 ## 9. Reproducibilidad
 
-Para reproducir todos los experimentos y gráficos:
-
 ```sh
-# Compilar ambos módulos
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
 make all
-
-# Ejecutar el análisis completo
+make test
+make integrada
 make analisis
-
-# O directamente:
-python3 analisis/generar_analisis.py
 ```
 
-Los gráficos se guardan en `docs/graficos/`.  El script requiere `matplotlib`:
+Ubuntu necesita `python3-venv` para crear el entorno. El Makefile selecciona el
+Python local automáticamente. La ejecución real requiere los tres binarios C y
+matplotlib; un error de ejecución o de formato detiene el análisis en lugar de
+convertirse en cero fallos. `--solo-tablas` permite omitir gráficos explícitamente.
 
-```sh
-pip install matplotlib
-```
+El resultado real contiene siete PNG, ocho CSV y `metadata.json` con modo,
+fecha, versiones, semillas y hashes de ejecutables. Seis experimentos de ejemplo
+Python pueden ejecutarse con `--demo`; sus archivos se guardan por separado en
+`docs/graficos/demo/` y no se usan como evidencia de los ejecutables C.
 
----
+## 10. Referencias de estudio
 
-## 10. Referencias
-
-- Silberschatz, Galvin, Gagne. *Operating System Concepts*, 10th ed.
-  Capítulos 8 (Memoria Virtual) y 5 (Planificación de CPU).
+- Tanenbaum, A. S. y Bos, H. *Modern Operating Systems*, 4.ª ed., capítulos 2 y 3.
+- Silberschatz, Galvin y Gagne. *Operating System Concepts*, 10.ª ed., planificación y memoria virtual.
 - Denning, P. J. (1968). *The Working Set Model for Program Behavior*.
-  Communications of the ACM, 11(5), 323–333.
-- Tanenbaum, A. S. *Modern Operating Systems*, 4th ed.
-  Capítulos 3 y 2.
+  Communications of the ACM, 11(5), 323-333.
+
+Las definiciones operacionales del simulador y los parámetros experimentales
+están especificados en este informe; las referencias proporcionan contexto de estudio.

@@ -1,6 +1,39 @@
-# Mini Shell POSIX
+# CoreOS-IF0702: Mini Shell y simulador de sistema operativo
 
-## Entrega 3: memoria virtual con LRU
+## Entrega 3: ejecución y validación
+
+Desde Ubuntu/WSL, dentro de `~/pySistemasOperativos/Proyecto_SO`:
+
+```sh
+make all
+make test
+make integrada
+make analisis
+```
+
+`make integrada` compila y ejecuta una demostración de Round Robin + LRU con
+coste por fallo de página. `make test` verifica las entregas anteriores,
+memoria, planificación, integración y el manejo de errores del análisis.
+La prueba de estrés conserva 20 repeticiones de 10 000 datos con límite de
+60 s por ejecución para WSL; `LIMIT` permite configurar esa cota.
+
+Para generar los gráficos se utiliza un entorno Python local:
+
+```sh
+# Preparación en una instalación nueva de Ubuntu
+sudo apt install gcc make python3-venv
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+make analisis
+```
+
+El Makefile usa `.venv/bin/python` si existe; también admite `make PYTHON=python3`.
+Para obtener únicamente CSV: `.venv/bin/python analisis/generar_analisis.py --solo-tablas`.
+El modo real exige los tres ejecutables C y falla si no están disponibles.
+El modo de ejemplo se elige con `--demo`; guarda sus seis experimentos en
+`docs/graficos/demo/`, separados de los resultados reales.
+
+## Memoria virtual LRU
 
 ```sh
 make memoria
@@ -8,12 +41,11 @@ make test-memoria
 ./fase3_memoria -m 2 -s 256 511 256 512
 ```
 
-Simula traduccion de direcciones virtuales a fisicas, tablas de paginas por
-proceso, marcos compartidos y reemplazo LRU. Acepta referencias propias y exporta
-una traza CSV. Consulta los casos con resultados esperados y la API de integracion
-en [docs/memoria_virtual.md](docs/memoria_virtual.md).
+Traduce direcciones virtuales a físicas, mantiene tablas por proceso, comparte
+marcos, aplica LRU global y registra aciertos, fallos y víctimas. Exporta CSV.
+Detalles y resultados esperados en [memoria virtual](docs/memoria_virtual.md).
 
-## Entrega 3: planificador Round Robin
+## Planificador Round Robin
 
 ```sh
 make planificador
@@ -21,53 +53,65 @@ make test-planificador
 ./fase3_planificador -q 4 1:0:4 2:3:1 3:1:1
 ```
 
-Admite quantum y procesos configurables, muestra Gantt y calcula espera,
-retorno y respuesta. Consulta ejemplos y resultados esperados en
-[docs/planificador_round_robin.md](docs/planificador_round_robin.md).
+Quantum y procesos configurables, cola FIFO, Gantt, cambios de contexto y
+métricas de espera, retorno y respuesta. Véase [Round Robin](docs/planificador_round_robin.md).
 
-## Entrega 3: métricas, análisis e informe técnico
-
-```sh
-make analisis
-```
-
-Genera 6 experimentos comparativos entre los módulos de memoria virtual y
-planificador, produce gráficos PNG y tablas CSV, y detecta situaciones de
-thrashing.  El informe técnico completo está en
-[docs/informe_tecnico.md](docs/informe_tecnico.md).
-
-## Integración CPU + memoria
-
-El ejecutable `fase3_integrada` conecta Round Robin con el simulador LRU.
-Cada unidad de CPU asignada a un proceso consume la siguiente dirección de su
-carga de memoria; por ello, el orden del Gantt determina el orden real de los
-aciertos y fallos:
+## Integración CPU + memoria y thrashing
 
 ```sh
 make integrada
-./fase3_integrada -q 2 -m 2 1:0:4:0,256 2:1:3:0,256
+make test-integrada
+./fase3_integrada -q 1 -m 2 -f 5 -t /tmp/integracion.csv 1:0:40:0,256 2:0:40:0,256
+./fase3_integrada -q 1 -m 4 -f 5 1:0:40:0,256 2:0:40:0,256
 ```
 
-El formato es `pid:llegada:rafaga:direccion,direccion,...`. Las referencias se
-repiten cíclicamente si la ráfaga es mayor que la lista. La salida muestra el
-Gantt y las métricas del planificador, mientras que la traza de memoria se
-envía a `stderr` y el resumen final incluye fallos y aciertos por proceso.
-Internamente, el planificador expone un callback opcional por unidad de CPU;
-los ejecutables independientes no lo configuran y conservan su comportamiento.
+Formato: `pid:llegada:rafaga:direccion,direccion,...`. Los PID son consecutivos
+desde 1, las direcciones son bytes y las listas se repiten cíclicamente.
+Opciones: `-q` quantum, `-m` marcos, `-s` tamaño de página, `-p` páginas por
+proceso, `-f` coste de fallo en ms (0 por defecto), `-t` archivo de traza CSV.
 
-**Experimentos:**
+Cada unidad productiva de CPU realiza un acceso a memoria. Con `-f 5`, cada
+fallo añade 5 ms de **servicio síncrono**, durante los cuales la CPU completa
+espera y el quantum no se consume. El Gantt incluye ese servicio dentro del
+turno; la traza identifica cada demora. Es un modelo didáctico de una CPU:
+no simula disco real ni E/S asíncrona que permita ejecutar otro proceso durante
+el servicio. No hay coste temporal de cambio de contexto y las páginas de
+procesos terminados se conservan hasta finalizar la simulación.
 
-| # | Experimento             | Variable                                 | Salida                                 |
-| - | ----------------------- | ---------------------------------------- | -------------------------------------- |
-| 1 | Fallos vs marcos        | Marcos 1–8                              | `exp1_fallos_vs_marcos.{png,csv}`    |
-| 2 | Patrones de acceso      | Secuencial/Localidad/Aleatorio/Thrashing | `exp2_patrones_acceso.{png,csv}`     |
-| 3 | Detección de thrashing | 1–12 procesos, 8 marcos fijos           | `exp3_thrashing.{png,csv}`           |
-| 4 | Carga de trabajo        | 25–800 referencias                      | `exp4_carga_trabajo.{png,csv}`       |
-| 5 | Quantum Round Robin     | Quantum 1–13                            | `exp5_quantum.{png,csv}`             |
-| 6 | Tipos de carga CPU      | CPU/IO/Mixta/Escalonada                  | `exp6_cargas_planificador.{png,csv}` |
+Se reportan métricas por proceso, tiempo productivo, servicio de fallos,
+ociosidad, utilización de CPU y referencias por ms. La espera en cola excluye
+el bloqueo propio: `espera = retorno - rafaga - bloqueo`.
+La respuesta se mide hasta el primer despacho, antes de servir su primer fallo.
 
-Requisito: `pip install matplotlib` para gráficos.  Sin matplotlib se generan
-tablas de texto y CSV.
+La tasa >50% se señala como **riesgo heurístico de thrashing**, elegido para
+este proyecto. Se interpreta junto con la fracción de tiempo en paginación,
+la localidad y la carga; los fallos iniciales también cuentan.
+
+En el ejemplo de 80 referencias con quantum 1 y coste 5 ms:
+
+| Marcos | Fallos | Tiempo total | CPU productiva |
+|---|---:|---:|---:|
+| 2 | 80 | 480 ms | 16.67% |
+| 4 | 4 | 100 ms | 80.00% |
+
+## Análisis e informe técnico
+
+`make analisis` genera **7 gráficos PNG, 8 CSV y metadata.json** en `docs/graficos/`.
+El archivo de metadatos registra modo, versiones, semillas y hashes de ejecutables.
+
+| # | Experimento | Comparación |
+|---|---|---|
+| 1 | Fallos vs marcos | 1 a 8 marcos, secuencia LRU clásica |
+| 2 | Patrones | Secuencial, localidad, aleatorio y cíclico adverso |
+| 3 | Multiprogramación | 1 a 12 procesos, 8 marcos, misma carga por PID |
+| 4 | Longitud de carga | 25 a 800 referencias, localidad vs aleatorio |
+| 5 | Quantum | 1 a 13, métricas y cantidad de cambios de contexto |
+| 6 | Ráfagas de CPU | Largas, cortas, mixtas y llegadas escalonadas |
+| 7 | CPU + memoria | 1 a 8 marcos, quantum 1/2/4, coste por fallo 0/5 ms |
+
+El [informe técnico](docs/informe_tecnico.md) presenta fórmulas, arquitectura,
+resultados, límites del modelo y relación con los cuatro criterios de la rúbrica.
+La [guía integrada](docs/integracion_cpu_memoria.md) explica los ejemplos y la traza.
 
 ## Entregas anteriores
 
@@ -155,8 +199,8 @@ Para compilar y ejecutar las pruebas automatizadas:
 make test
 ```
 
-Este objetivo verifica la redireccion de entrada y salida mediante `cat`,
-`<` y `>`.
+Este objetivo ejecuta la suite completa de shell, concurrencia, memoria,
+planificación, integración y análisis. Para probar solo redirecciones use `make test-shell`.
 
 Para eliminar los archivos generados por la compilación:
 

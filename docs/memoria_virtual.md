@@ -8,10 +8,10 @@ make test-memoria     # Pruebas del modulo y de la interfaz
 ./fase3_memoria -h
 ```
 
-El simulador es independiente del Round Robin. No necesita hilos ni ejecutar
-procesos reales: representa un espacio de direcciones virtual por PID y una
-memoria fisica compartida. La integracion con el planificador y los experimentos
-comparativos quedan disponibles para la siguiente etapa del equipo.
+El módulo también puede ejecutarse de forma independiente. Representa un espacio
+de direcciones virtual por PID y una memoria física compartida. La integración
+con Round Robin ya está implementada en `fase3_integrada`, y los experimentos se
+ejecutan con `make analisis`. Véase [la guía integrada](integracion_cpu_memoria.md).
 
 Archivos:
 
@@ -57,8 +57,9 @@ entrada de la victima y registra la nueva correspondencia. **Los aciertos tambie
 actualizan el ultimo acceso**. La politica es global: puede desalojar paginas de
 otro proceso. El reloj cuenta referencias validas, no milisegundos de CPU.
 
-El simulador representa carga y reemplazo de paginas; no almacena su contenido,
-no simula disco, escrituras, paginas sucias ni latencia por fallo. Cada referencia
+Este módulo representa carga y reemplazo de páginas; no almacena su contenido
+ni simula disco, escrituras o páginas sucias. Devuelve un evento de fallo; el
+ejecutable integrado aplica la latencia configurable mediante `-f`. Cada referencia
 valida produce exactamente un acierto o un fallo. Entradas invalidas devuelven
 error y no cuentan como referencias.
 
@@ -142,9 +143,9 @@ memoria_destruir(&memoria);
 Crear una sola instancia para la simulacion completa y llamar a
 `memoria_acceder` por cada referencia del proceso despachado. Los PID deben estar
 en `1..num_procesos`; si el planificador usa otros identificadores, mapearlos.
-El modulo no modifica PCB, tiempos de CPU ni orden de despacho. Se debe acordar
-en la integracion que referencia corresponde a cada turno y si un fallo tendra
-penalizacion temporal; actualmente los fallos solo se contabilizan.
+El módulo no modifica PCB, tiempos de CPU ni orden de despacho directamente.
+`fase3_integrada` consume una referencia por tick y aplica servicio síncrono
+configurable (`-f`, valor inicial 0) mediante el callback del planificador.
 
 Es una API secuencial; no es segura para accesos concurrentes desde hilos.
 Destruir la instancia antes de reinicializarla. En un acceso invalido la salida

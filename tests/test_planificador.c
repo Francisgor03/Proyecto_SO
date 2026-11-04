@@ -3,6 +3,11 @@
 #include <assert.h>
 #include <limits.h>
 
+static int servicio(const proceso_t *p, int tiempo, void *datos) {
+    (void)p; (void)tiempo;
+    return *(int *)datos;
+}
+
 int main(void) {
     /* La traza se verifica en Python; aqui se comprueban el estado y la API. */
     assert(freopen("/dev/null", "w", stdout));
@@ -62,6 +67,23 @@ int main(void) {
     assert(ejecutar_round_robin(&plan) == 0 && invalido.tiempo_fin == INT_MAX);
     muchos[1].pid = muchos[0].pid;
     assert(inicializar_planificador(&plan, 1, 151, muchos) == -1);
+    proceso_t breve = {.pid=1, .tiempo_llegada=0, .rafaga_cpu=2};
+    int demora = 5;
+    assert(inicializar_planificador(&plan, 1, 1, &breve) == 0);
+    planificador_configurar_acceso_cpu(&plan, servicio, &demora);
+    for (int vuelta = 0; vuelta < 2; vuelta++) {
+        assert(ejecutar_round_robin(&plan) == 0);
+        assert(plan.tiempo_total == 12 && plan.tiempo_cpu == 2);
+        assert(plan.tiempo_bloqueado == 10 && plan.tiempo_ocioso == 0);
+        assert(breve.tiempo_espera == 0 && breve.tiempo_bloqueado == 10);
+    }
+    demora = -1;
+    assert(ejecutar_round_robin(&plan) == -1);
+    demora = INT_MAX;
+    assert(ejecutar_round_robin(&plan) == -1);
+    demora = 0;
+    assert(ejecutar_round_robin(&plan) == 0 && plan.tiempo_total == 2);
+    assert(plan.tiempo_bloqueado == 0 && breve.tiempo_bloqueado == 0);
     fprintf(stderr, "[OK] API Round Robin: metricas, estados, reinicio, 10001 turnos, 151 procesos y limites.\n");
     return 0;
 }

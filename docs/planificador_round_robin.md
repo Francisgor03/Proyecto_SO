@@ -123,17 +123,18 @@ procesos listos, el reloj salta a la proxima llegada e imprime el intervalo IDLE
 ```text
 respuesta = primer_inicio - llegada
 retorno = fin - llegada
-espera = retorno - rafaga_cpu
+espera = retorno - rafaga_cpu - tiempo_bloqueado
 promedio = suma de la metrica / numero de procesos
 ```
 
 Se cuenta un despacho por turno. Se cuenta un cambio de contexto cuando dos
 despachos consecutivos pertenecen a procesos diferentes, incluso si entre ellos
 hay un periodo IDLE. El primer despacho y repetir el mismo proceso no incrementan
-ese contador. No se agrega costo temporal de conmutacion; no se simula E/S ni
-bloqueo por fallos de pagina en este modulo independiente.
+ese contador. No se agrega costo temporal de conmutacion; en el ejecutable independiente no hay bloqueo por fallos. Con el callback
+integrado, un retorno positivo introduce servicio síncrono y estado BLOQUEADO
+durante ese servicio; se excluye del tiempo de espera propio.
 
-## API e integracion posterior
+## API e integración con memoria
 
 `inicializar_planificador` y `ejecutar_round_robin` ahora devuelven `int`: 0 para
 exito y -1 para error. La inicializacion valida todos los datos antes de cambiar
@@ -153,7 +154,9 @@ void planificador_configurar_acceso_cpu(planificador_t *plan,
 ```
 
 El callback recibe el proceso, el instante actual y un contexto definido por el
-llamador. Si devuelve `-1`, la simulacion se detiene y el error se propaga.
+llamador. Un valor negativo detiene la simulación con error; 0 continúa sin demora
+y un valor positivo añade esa cantidad de ms de servicio síncrono. La demora no
+consume quantum y el reloj se valida contra desbordamientos.
 `fase3_integrada` usa esta interfaz para llamar a `memoria_acceder()` una vez
 por milisegundo de CPU y contabilizar page faults por proceso. Asi, el orden de
 Round Robin determina la secuencia global LRU.
@@ -165,3 +168,9 @@ milisegundo independiente: 7 casos dirigidos y 80 casos aleatorios reproducibles
 Incluye CPU ociosa, llegadas desordenadas, empates, llegadas en frontera de
 quantum, mas de 100 turnos y mas de 100 procesos. La prueba C revisa estados,
 reinicio de simulacion, metricas conocidas, contadores y limites numericos.
+
+Los contadores `tiempo_total`, `tiempo_cpu`, `tiempo_bloqueado` y
+`tiempo_ocioso` se reinician en cada ejecución. Para ejecuciones completas:
+`total = cpu + bloqueado + ocioso`. La respuesta se mide hasta el primer
+despacho, antes de la primera demora de memoria. El Gantt integrado incluye
+CPU y servicio dentro de cada turno. Véase [integración](integracion_cpu_memoria.md).
