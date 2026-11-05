@@ -9,6 +9,15 @@ make extras-manuales
 make test-extras-manuales
 ```
 
+Para generar los gráficos comparativos y sus tablas CSV:
+
+```sh
+make graficos-extras
+```
+
+La salida queda en `docs/graficos/extra_fifo_lru.{png,csv}` y
+`docs/graficos/extra_sjf_rr.{png,csv}`.
+
 `extra_memoria` compara FIFO y LRU con la secuencia de paginas
 `1 2 3 4 1 2 5 1 2 3 4 5`, en instancias nuevas. FIFO produce 9 fallos
 con tres marcos y 10 con cuatro (anomalia de Belady); LRU produce 10 y 8.

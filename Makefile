@@ -34,9 +34,10 @@ PLANIFICADOR_TEST := tests/test_planificador
 INTEGRADA_TARGET := fase3_integrada
 INTEGRADA_SOURCES := src/main_integrada.c src/planificador.c src/memoria.c
 ANALISIS_SCRIPT := analisis/generar_analisis.py
+EXTRAS_GRAFICOS_SCRIPT := analisis/generar_graficos_extras.py
 PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 
-.PHONY: all run concurrent filosofos lectores-escritores peluquero memoria planificador integrada analisis test test-shell test-concurrent test-stress test-fallos test-filosofos test-lectores-escritores test-peluquero test-memoria test-planificador test-integrada test-analisis clean
+.PHONY: all run concurrent filosofos lectores-escritores peluquero memoria planificador integrada analisis graficos-extras test test-shell test-concurrent test-stress test-fallos test-filosofos test-lectores-escritores test-peluquero test-memoria test-planificador test-integrada test-analisis clean
 
 all: $(TARGET) $(CONCURRENT_TARGET) $(FILOSOFOS_TARGET) $(RW_TARGET) $(PELUQUERO_TARGET) $(MEMORIA_TARGET) $(PLANIFICADOR_TARGET) $(INTEGRADA_TARGET)
 
@@ -66,6 +67,9 @@ test-integrada: $(INTEGRADA_TARGET)
 
 test-analisis: $(MEMORIA_TARGET) $(PLANIFICADOR_TARGET) $(INTEGRADA_TARGET)
 	$(PYTHON) tests/test_analisis.py
+
+graficos-extras: extra_memoria extra_cpu
+	$(PYTHON) $(EXTRAS_GRAFICOS_SCRIPT) ./extra_memoria ./extra_cpu
 
 analisis: $(MEMORIA_TARGET) $(PLANIFICADOR_TARGET) $(INTEGRADA_TARGET)
 	@printf "\n=== GRUPO 3: METRICAS, ANALISIS Y GRAFICOS ===\n"

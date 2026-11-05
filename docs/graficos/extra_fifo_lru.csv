@@ -1,0 +1,5 @@
+algoritmo,marcos,referencias,fallos,aciertos,tasa_fallos
+FIFO,3,12,9,3,75.0
+FIFO,4,12,10,2,83.33
+LRU,3,12,10,2,83.33
+LRU,4,12,8,4,66.67

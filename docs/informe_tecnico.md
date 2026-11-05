@@ -6,12 +6,13 @@ Se implementa un motor de planificación Round Robin acoplado a memoria virtual
 paginada con reemplazo LRU global. Se registran traducciones, fallos, víctimas,
 conmutaciones, tiempos por proceso y resultados comparativos de paginación.
 
-| Criterio | Implementación | Evidencia reproducible |
-|---|---|---|
-| Memoria virtual (8 puntos) | Tablas por PID, traducción y LRU | `make test-memoria` |
-| Planificador (6 puntos) | Quantum, cola, Gantt y métricas | `make test-planificador` |
-| Métricas y análisis (4 puntos) | Siete experimentos, incluyendo CPU + memoria | `make analisis` |
-| Informe técnico (2 puntos) | Modelo, fórmulas, módulos y límites | Este informe y guías de módulos |
+| Criterio                         | Implementación                              | Evidencia reproducible            |
+| -------------------------------- | -------------------------------------------- | --------------------------------- |
+| Memoria virtual (8 puntos)       | Tablas por PID, traducción y LRU            | `make test-memoria`             |
+| Planificador (6 puntos)          | Quantum, cola, Gantt y métricas             | `make test-planificador`        |
+| Métricas y análisis (4 puntos) | Siete experimentos, incluyendo CPU + memoria | `make analisis`                 |
+| Informe técnico (2 puntos)      | Modelo, fórmulas, módulos y límites       | Este informe y guías de módulos |
+| Extras                           | Comparación FIFO/LRU y SJF/Round Robin      | `make test-extras-manuales`     |
 
 El proyecto es un simulador de una CPU con tiempo discreto. No ejecuta procesos
 reales para las ráfagas simuladas; el shell POSIX de entregas anteriores sigue
@@ -91,20 +92,20 @@ páginas sucias ni disco real. Con coste cero reproduce el modelo sin latencia.
 
 ### 3.4 Métricas
 
-| Métrica | Fórmula |
-|---|---|
-| Tasa de fallos | `100 * fallos / referencias` |
-| Aciertos | `referencias - fallos` |
-| Respuesta | `primer_despacho - llegada` |
-| Retorno | `fin - llegada` |
-| Bloqueo propio | `fallos_proceso * C` |
-| Espera en cola | `retorno - rafaga_CPU - bloqueo_propio` |
-| Promedio | `suma(metrica) / N` |
-| Servicio de fallos | `suma(bloqueos_propios)` |
-| Tiempo total desde t=0 | `CPU_productiva + servicio_fallos + ocioso` |
-| Utilización productiva | `100 * CPU_productiva / tiempo_total` |
-| Fracción de paginación | `100 * servicio_fallos / tiempo_total` |
-| Rendimiento | `referencias / tiempo_total` |
+| Métrica                 | Fórmula                                      |
+| ------------------------ | --------------------------------------------- |
+| Tasa de fallos           | `100 * fallos / referencias`                |
+| Aciertos                 | `referencias - fallos`                      |
+| Respuesta                | `primer_despacho - llegada`                 |
+| Retorno                  | `fin - llegada`                             |
+| Bloqueo propio           | `fallos_proceso * C`                        |
+| Espera en cola           | `retorno - rafaga_CPU - bloqueo_propio`     |
+| Promedio                 | `suma(metrica) / N`                         |
+| Servicio de fallos       | `suma(bloqueos_propios)`                    |
+| Tiempo total desde t=0   | `CPU_productiva + servicio_fallos + ocioso` |
+| Utilización productiva  | `100 * CPU_productiva / tiempo_total`       |
+| Fracción de paginación | `100 * servicio_fallos / tiempo_total`      |
+| Rendimiento              | `referencias / tiempo_total`                |
 
 La respuesta termina en el primer despacho, antes de servir su primer fallo.
 El Gantt incluye CPU y servicio dentro del turno; las demoras se identifican
@@ -118,15 +119,15 @@ motor integrado. Se usan las mismas cargas al comparar configuraciones y semilla
 fijas para patrones aleatorios. El experimento 7 es factorial: cruza quantum,
 marcos y coste, comparando resultados con los otros parámetros fijos.
 
-| Exp. | Configuración | Variable |
-|---|---|---|
-| 1 | 13 referencias clásicas, páginas de 256 bytes | Marcos 1..8 |
-| 2 | 200 referencias, 16 páginas | Patrón y marcos 1..16 |
-| 3 | 8 marcos, 50 referencias/PID, 8 páginas activas de 16 virtuales | 1..12 procesos |
-| 4 | 4 marcos, 16 páginas | Longitud 25..800, localidad/aleatorio |
-| 5 | P1(0,8), P2(1,4), P3(2,9), P4(3,5) | Quantum 1..13 |
-| 6 | Quantum 3; ráfagas largas, cortas, mixtas o escalonadas | Tipo de carga |
-| 7 | 2 procesos en t=0, 40 ticks/PID, referencias cíclicas 0/256 | Marcos 1..8, quantum 1/2/4, coste 0/5 ms |
+| Exp. | Configuración                                                   | Variable                                 |
+| ---- | ---------------------------------------------------------------- | ---------------------------------------- |
+| 1    | 13 referencias clásicas, páginas de 256 bytes                  | Marcos 1..8                              |
+| 2    | 200 referencias, 16 páginas                                     | Patrón y marcos 1..16                   |
+| 3    | 8 marcos, 50 referencias/PID, 8 páginas activas de 16 virtuales | 1..12 procesos                           |
+| 4    | 4 marcos, 16 páginas                                            | Longitud 25..800, localidad/aleatorio    |
+| 5    | P1(0,8), P2(1,4), P3(2,9), P4(3,5)                               | Quantum 1..13                            |
+| 6    | Quantum 3; ráfagas largas, cortas, mixtas o escalonadas         | Tipo de carga                            |
+| 7    | 2 procesos en t=0, 40 ticks/PID, referencias cíclicas 0/256     | Marcos 1..8, quantum 1/2/4, coste 0/5 ms |
 
 En el experimento 3 cada PID usa `Random(2026 + PID)`. Su carga se conserva al
 añadir procesos; se intercalan sus referencias por turno. Esto controla la
@@ -202,12 +203,12 @@ universal de Round Robin. Las llegadas escalonadas todavía se solapan.
 
 Resultados con quantum 1 y 80 referencias:
 
-| Marcos | Coste/fallo | Fallos | Servicio | Total | CPU productiva |
-|---:|---:|---:|---:|---:|---:|
-| 2 | 0 ms | 80 | 0 ms | 80 ms | 100% |
-| 4 | 0 ms | 4 | 0 ms | 80 ms | 100% |
-| 2 | 5 ms | 80 | 400 ms | 480 ms | 16.67% |
-| 4 | 5 ms | 4 | 20 ms | 100 ms | 80% |
+| Marcos | Coste/fallo | Fallos | Servicio |  Total | CPU productiva |
+| -----: | ----------: | -----: | -------: | -----: | -------------: |
+|      2 |        0 ms |     80 |     0 ms |  80 ms |           100% |
+|      4 |        0 ms |      4 |     0 ms |  80 ms |           100% |
+|      2 |        5 ms |     80 |   400 ms | 480 ms |         16.67% |
+|      4 |        5 ms |      4 |    20 ms | 100 ms |            80% |
 
 Con coste positivo y dos marcos, la paginación ocupa 83.33% del tiempo. Con cuatro
 marcos ocupa 20%. Manteniendo dos marcos y coste 5, elevar quantum a 4 permite
@@ -215,7 +216,108 @@ reutilizar páginas dentro de cada turno: los fallos bajan a 40 y el total a 280
 La evidencia muestra tanto el efecto del orden de CPU en LRU como el efecto de
 los fallos en los tiempos. La mejora depende de esta carga y del modelo síncrono.
 
-## 6. Interpretación de thrashing
+## 6. Extras: comparación de algoritmos
+
+Como ampliación independiente de la entrega se implementaron dos comparaciones
+reproducibles. Estos programas reutilizan las estructuras y reglas de los
+módulos principales, pero no modifican el comportamiento de LRU, Round Robin ni
+del ejecutable integrado.
+
+### 6.1 FIFO frente a LRU
+
+Se compararon ambas políticas con la misma secuencia de páginas:
+
+```text
+1 2 3 4 1 2 5 1 2 3 4 5
+```
+
+Cada política se ejecuta en una instancia nueva de memoria, con páginas de 256
+bytes. FIFO usa el instante de carga como orden de reemplazo y no actualiza la
+posición de una página cuando ocurre un acierto. LRU, en cambio, actualiza la
+recencia tanto en aciertos como en fallos.
+
+| Política |  3 marcos |  4 marcos |
+| --------- | --------: | --------: |
+| FIFO      |  9 fallos | 10 fallos |
+| LRU       | 10 fallos |  8 fallos |
+
+El resultado muestra la anomalía de Bélády en FIFO: al aumentar de tres a cuatro
+marcos, los fallos suben de 9 a 10. En esta carga LRU no presenta ese aumento y
+mejora de 10 a 8 fallos. Esto no significa que LRU siempre sea mejor para toda
+secuencia, sino que las políticas responden de forma diferente al patrón de
+acceso.
+
+![Fallos de FIFO y LRU según los marcos](graficos/extra_fifo_lru.png)
+
+La gráfica confirma visualmente que FIFO empeora en la configuración de cuatro
+marcos, mientras LRU reduce los fallos. Los datos usados para construirla se
+conservan en [extra_fifo_lru.csv](graficos/extra_fifo_lru.csv).
+
+Se reproduce con:
+
+```sh
+make extra_memoria
+./extra_memoria
+```
+
+### 6.2 SJF no apropiativo frente a Round Robin
+
+Se comparó SJF no apropiativo con Round Robin usando los cuatro procesos de la
+carga principal y quantum 3. SJF elige, entre los procesos ya llegados, la
+ráfaga más corta y ejecuta esa ráfaga hasta terminar. En empates se conserva el
+orden de llegada y después la posición original. No se implementa SRTF.
+
+| Algoritmo   | Retorno promedio | Espera promedio | Respuesta promedio |
+| ----------- | ---------------: | --------------: | -----------------: |
+| Round Robin |         20.00 ms |        13.50 ms |            3.00 ms |
+| SJF         |         14.25 ms |         7.75 ms |            7.75 ms |
+
+En esta carga, SJF reduce el retorno y la espera promedio, mientras Round Robin
+ofrece una respuesta promedio menor. Es el compromiso esperado: SJF favorece la
+finalización de trabajos cortos, mientras Round Robin reparte la CPU y favorece
+la interacción. Los valores no prueban que un algoritmo sea universalmente
+superior.
+
+![Métricas promedio de SJF y Round Robin](graficos/extra_sjf_rr.png)
+
+La gráfica muestra que SJF obtiene menores tiempos promedio de retorno y espera,
+mientras Round Robin obtiene menor tiempo de respuesta. Los datos que alimentan
+la comparación están disponibles en [extra_sjf_rr.csv](graficos/extra_sjf_rr.csv).
+
+Se reproduce con:
+
+```sh
+make extra_cpu
+./extra_cpu
+```
+
+Los resultados también se pueden visualizar automáticamente:
+
+```sh
+make graficos-extras
+```
+
+Este comando genera `docs/graficos/extra_fifo_lru.png`,
+`docs/graficos/extra_sjf_rr.png` y sus tablas CSV correspondientes. El primer
+gráfico muestra los fallos según el número de marcos; el segundo compara las
+tres métricas promedio de CPU.
+
+### 6.3 Validación y límites de los extras
+
+Las comparaciones se prueban sin mezclar instancias FIFO y LRU. También se
+validan traducciones, víctimas, límites, reinicios, llegadas, empates y el
+callback síncrono del planificador:
+
+```sh
+make test-extras-manuales
+```
+
+Los extras de CPU se ejecutan de forma independiente y no añaden costes de
+memoria ni de conmutación a la comparación SJF/Round Robin. La comparación
+FIFO/LRU tampoco sustituye al simulador integrado: su objetivo es aislar el
+efecto de la política de reemplazo sobre una misma secuencia.
+
+## 7. Interpretación de thrashing
 
 El proyecto usa la tasa de fallos como **indicador heurístico**: <30% NORMAL,
 30%..50% ADVERTENCIA y >50% RIESGO ALTO. Los límites se comparan con los conteos,
@@ -235,7 +337,7 @@ usadas en una ventana. Este proyecto no calcula working sets por ventana ni
 implementa control de admisión o asignación local. Esas son extensiones posibles,
 no funcionalidades demostradas por estos resultados.
 
-## 7. Validación y errores
+## 8. Validación y errores
 
 `make test-memoria` revisa traducciones, aislamiento por PID, víctimas LRU,
 límites e invariantes tras 10 000 accesos; compara además 15 escenarios de 150
@@ -258,7 +360,7 @@ configurable con `LIMIT`: con la traza completa, esta máquina WSL puede superar
 la cota anterior de 15 s aun avanzando correctamente. El límite no sustituye la
 verificación de cuotas, identidad de datos y ausencia de pérdidas/duplicados.
 
-## 8. Conclusiones y límites
+## 9. Conclusiones y límites
 
 La implementación conserva el estado por proceso, aplica LRU correctamente y
 calcula las métricas de Round Robin. El acoplamiento permite que la planificación
@@ -270,7 +372,7 @@ no se representa un SO que solape trabajo de otros procesos con E/S de disco.
 No se implementan contenidos de memoria ni políticas de admisión. Las métricas
 se interpretan dentro de esos supuestos explícitos.
 
-## 9. Reproducibilidad
+## 10. Reproducibilidad
 
 ```sh
 python3 -m venv .venv
@@ -291,7 +393,7 @@ fecha, versiones, semillas y hashes de ejecutables. Seis experimentos de ejemplo
 Python pueden ejecutarse con `--demo`; sus archivos se guardan por separado en
 `docs/graficos/demo/` y no se usan como evidencia de los ejecutables C.
 
-## 10. Referencias de estudio
+## 11. Referencias de estudio
 
 - Tanenbaum, A. S. y Bos, H. *Modern Operating Systems*, 4.ª ed., capítulos 2 y 3.
 - Silberschatz, Galvin y Gagne. *Operating System Concepts*, 10.ª ed., planificación y memoria virtual.
